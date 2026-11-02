@@ -181,18 +181,19 @@ function commode(x, z) {
 
 // --- Objets qu'on utilise avec la gâchette ---
 function lampeTorche(pos) {
-  const o = creerObjet({ pos, masse: 0.4, son: 'metal', nom: 'lampe', formes: [
-    C(0.022, 0.2, M.fonte, { rot: SUR_Z }),
-    C(0.032, 0.05, M.chrome, { rot: SUR_Z, pos: [0, 0, -0.12] }),
+  const o = creerObjet({ pos, masse: 0.5, son: 'metal', nom: 'lampe', formes: [
+    C(0.024, 0.2, M.fonte, { rot: SUR_Z, pos: [0, 0, -0.02] }),
+    C(0.034, 0.05, M.chrome, { rot: SUR_Z, pos: [0, 0, -0.14] }),
+    B([0.03, 0.1, 0.035], M.caoutchouc, { pos: [0, -0.07, 0.03] }),
   ] });
-  const verre = new THREE.Mesh(new THREE.CircleGeometry(0.028, 16), new THREE.MeshBasicMaterial({ color: 0x555555 }));
-  verre.position.set(0, 0, -0.146);
+  const verre = new THREE.Mesh(new THREE.CircleGeometry(0.03, 16), new THREE.MeshBasicMaterial({ color: 0x555555 }));
+  verre.position.set(0, 0, -0.166);
   verre.rotation.y = Math.PI;
   const spot = new THREE.SpotLight(0xfff2d8, 0, 20, 0.38, 0.45, 1.5);
-  spot.position.set(0, 0, -0.15);
+  spot.position.set(0, 0, -0.17);
   spot.target.position.set(0, 0, -2);
   o.groupe.add(verre, spot, spot.target);
-  o.prise = { pos: new THREE.Vector3(0, 0, 0.03), quat: new THREE.Quaternion() };
+  o.poignee = new THREE.Vector3(0, -0.07, 0.03);
   o.utiliser = (objet, main) => {
     const allumee = spot.intensity === 0;
     spot.intensity = allumee ? 25 : 0;
@@ -207,9 +208,9 @@ function lanceBalles(pos, munitions) {
   const o = creerObjet({ pos, masse: 0.9, son: 'plastique', nom: 'lance-balles', formes: [
     C(0.035, 0.32, M.acierOrange, { rot: SUR_Z, pos: [0, 0, -0.08] }),
     C(0.026, 0.1, M.fonte, { rot: SUR_Z, pos: [0, 0, -0.27] }),
-    B([0.05, 0.06, 0.08], M.fonte, { pos: [0, -0.04, 0.05] }),
+    B([0.035, 0.11, 0.045], M.fonte, { pos: [0, -0.075, 0.04] }),
   ] });
-  o.prise = { pos: new THREE.Vector3(0, 0, 0.04), quat: new THREE.Quaternion() };
+  o.poignee = new THREE.Vector3(0, -0.075, 0.04);
   let suivante = 0;
   const bout = new THREE.Vector3(), dir = new THREE.Vector3();
   o.utiliser = (objet, main) => {
@@ -285,7 +286,7 @@ function construireHall() {
   balle([3.8, 0.86, 15.4], 0x3c7bd6);
   creerObjet({ pos: [4.05, 0.85, 15.7], masse: 0.9, nom: 'cube', formes: [B([0.12, 0.12, 0.12], M.bois)] });
   creerObjet({ pos: [3.5, 0.81, 15.2], masse: 0.9, nom: 'bâton', formes: [B([0.9, 0.045, 0.045], M.bois)] });
-  lampeTorche([4.05, 0.81, 15.25]);
+  lampeTorche([4.05, 0.91, 15.25]);
   marteau([3.3, 0.81, 15.85]);
 
   // Bac de balles en mousse + lance-balles
@@ -302,7 +303,7 @@ function construireHall() {
     b.jouet = true;
     munitions.push(b);
   }
-  lanceBalles([4.35, 0.84, 15.55], munitions);
+  lanceBalles([4.35, 0.92, 15.55], munitions);
 
   // Décor
   banc(-7.5, 17, Math.PI / 2);

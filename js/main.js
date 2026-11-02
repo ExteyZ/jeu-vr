@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { RAPIER, world, scene, objets, infos, manettes, vibrer, synchroniserObjets, replacer } from './monde.js';
-import { MainPhysique, crochets } from './mains.js';
+import { MainPhysique, crochets, piloterObjetsTenus } from './mains.js';
 import { Joueur } from './joueur.js';
 import { Inventaire } from './inventaire.js';
 import { construireCarte } from './carte.js';
@@ -195,6 +195,10 @@ const matCam = new THREE.Matrix4(), qCam = new THREE.Quaternion();
 const MAIN_PC = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 const echelle = new THREE.Vector3(), qTmp = new THREE.Quaternion();
 const ancienneMain = { left: new THREE.Vector3(), right: new THREE.Vector3() }, vBrute = new THREE.Vector3();
+// La poignée de la manette est inclinée par rapport à l'avant-bras : on redresse la main de cet angle,
+// mesuré entre le repère "grip" et la direction où pointe la manette (environ 45° sur Quest)
+const inclinaison = { left: 0.75, right: 0.75 };
+const AXE_X = new THREE.Vector3(1, 0, 0), qIncl = new THREE.Quaternion(), qGrip = new THREE.Quaternion(), dRayon = new THREE.Vector3();
 
 function majCibles(e, enVR, dt, mesurerVitesse) {
   if (!enVR) {
@@ -206,9 +210,15 @@ function majCibles(e, enVR, dt, mesurerVitesse) {
     if (enVR) {
       const grip = e.poses[cote];
       if (!grip) { main.desactiver(); continue; }
-      grip.matrixWorld.decompose(main.cible.pos, main.cible.quat, echelle);
+      grip.matrixWorld.decompose(main.cible.pos, qGrip, echelle);
       (e.rayons[cote] ?? grip).matrixWorld.decompose(main.rayon.origine, qTmp, echelle);
       main.rayon.dir.set(0, 0, -1).applyQuaternion(qTmp);
+      if (e.rayons[cote]) {
+        dRayon.copy(main.rayon.dir).applyQuaternion(qIncl.copy(qGrip).invert());
+        const a = Math.atan2(-dRayon.z, -dRayon.y);
+        if (Number.isFinite(a)) inclinaison[cote] += (THREE.MathUtils.clamp(a, 0, 1.2) - inclinaison[cote]) * 0.1;
+      }
+      main.cible.quat.copy(qGrip).multiply(qIncl.setFromAxisAngle(AXE_X, inclinaison[cote]));
       if (mesurerVitesse) {
         vBrute.copy(grip.position).sub(ancienneMain[cote]).divideScalar(dt).applyQuaternion(rig.quaternion);
         main.vitesseMain.lerp(vBrute, 0.5);
@@ -295,6 +305,7 @@ function boucle(dtImpose) {
     m.majAttraction(dt);
     m.piloter(dt);
   }
+  piloterObjetsTenus(dt);
   joueur.teteMonde(tete);
   for (const p of personnages) p.maj(dt, tete);
   Object.assign(avant, { saut: e.saut, reset: e.reset, retour: e.retour, modeRotation: e.modeRotation });
