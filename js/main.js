@@ -193,6 +193,7 @@ function lirePC(dt) {
 // Sur PC, les mains flottent devant la caméra et visent là où l'on regarde
 const matCam = new THREE.Matrix4(), qCam = new THREE.Quaternion();
 const MAIN_PC = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+const ciblesForcees = { left: null, right: null };   // outil de test : place une main où l'on veut
 const echelle = new THREE.Vector3(), qTmp = new THREE.Quaternion();
 const ancienneMain = { left: new THREE.Vector3(), right: new THREE.Vector3() }, vBrute = new THREE.Vector3();
 // La poignée de la manette est inclinée par rapport à l'avant-bras : on redresse la main de cet angle,
@@ -225,6 +226,11 @@ function majCibles(e, enVR, dt, mesurerVitesse) {
         ancienneMain[cote].copy(grip.position);
       }
       main.modePC = false;
+    } else if (ciblesForcees[cote]) {
+      main.cible.pos.copy(ciblesForcees[cote].pos);
+      main.cible.quat.copy(ciblesForcees[cote].quat);
+      main.vitesseMain.set(0, 0, 0);
+      main.modePC = true;
     } else {
       main.cible.pos.set(cote === 'right' ? 0.2 : -0.2, -0.22, -portee).applyMatrix4(matCam);
       main.cible.quat.copy(qCam).multiply(MAIN_PC);   // poignet vers soi, doigts vers l'avant, pouce en haut
@@ -370,4 +376,8 @@ window.jeu = {
   get personnages() { return personnages; },
   get ips() { return ips; },
   simuler: (n, dt = 1 / 72) => { for (let i = 0; i < n; i++) boucle(dt); },
+  // jeu.forcerCible('right', {x,y,z}, quaternion) ; jeu.forcerCible('right', null) pour revenir à la normale
+  forcerCible: (cote, pos, quat = qCam.clone().multiply(MAIN_PC)) => {
+    ciblesForcees[cote] = pos ? { pos: new THREE.Vector3(pos.x, pos.y, pos.z), quat: new THREE.Quaternion().copy(quat) } : null;
+  },
 };
