@@ -82,6 +82,7 @@ function objetModele(id, pos, { masse = 0, rot = [0, 0, 0], forme = 'boite', son
   const o = creerObjet({ pos, rot, masse, son, nom, formes, fusion: false, friction, rebond, amortissement });
   if (!ombre) modele.traverse((m) => { if (m.isMesh) m.castShadow = false; });
   o.groupe.add(modele);
+  o.dimensions = t.clone();
   if (masse > 0) {
     const b = new THREE.Box3().setFromObject(o.groupe);
     const s = b.getSize(new THREE.Vector3());
@@ -342,10 +343,10 @@ export function construireCarte() {
     animations,
     depart: new THREE.Vector3(0, 0, 18.5),
     personnages: [
-      { nom: 'Léa', modele: 'femme', pos: [-2, 13], points: [[-2, 13], [2, 12.5], [0, 16], [-3, 19.5], [4, 19.5], [1, 21]], voix: 1 },
-      { nom: 'Marc', modele: 'homme', pos: [4, -4], points: [[-4, -4], [4, -4], [4, 4], [-4, 4], [0, 7], [-7, -2], [7, 2], [0, -7]], voix: 1 },
-      { nom: 'Karim', modele: 'homme', pos: [-17, 0], teinte: 0x9fb8ff, points: [[-17, 0], [-20, 4.5], [-17, -3], [-24, 1.2], [-20, 8], [-27, -0.5]], voix: 0.9 },
-      { nom: 'Sofia', modele: 'femme', pos: [17, 3], teinte: 0xffd8b0, points: [[16, 2], [19, 3], [17, 6], [20, 7], [16, 8.5], [20.5, 1]], voix: 1.08 },
+      { nom: 'Léa', genre: 'f', rocketbox: 'Female_Adult_02', pos: [-2, 13], points: [[-2, 13], [2, 12.5], [0, 16], [-3, 19.5], [4, 19.5], [1, 21]], voix: 1 },
+      { nom: 'Marc', genre: 'm', rocketbox: 'Male_Adult_01', pos: [4, -4], points: [[-4, -4], [4, -4], [4, 4], [-4, 4], [0, 7], [-7, -2], [7, 2], [0, -7]], voix: 1 },
+      { nom: 'Karim', genre: 'm', rocketbox: 'Male_Adult_05', pos: [-17, 0], points: [[-17, 0], [-20, 4.5], [-17, -3], [-24, 1.2], [-20, 8], [-27, -0.5]], voix: 0.9 },
+      { nom: 'Sofia', genre: 'f', rocketbox: 'Female_Adult_04', pos: [17, 3], points: [[16, 2], [19, 3], [17, 6], [20, 7], [16, 8.5], [20.5, 1]], voix: 1.08 },
     ],
   };
 }
@@ -512,7 +513,7 @@ function construireEntrepot() {
   creerObjet({ pos: [-16.6, 0.29, 8.4], rot: [Math.PI / 2, 0.4, 0], masse: 20, son: 'metal', formes: [C(0.29, 0.88, M.acierOrange)], nom: 'baril' });
   // Pneus, caisses en plastique, caisse à outils, masse
   [[-20.5, 8.8], [-21.6, 8.6], [-22.7, 8.75]].forEach(([x, z]) =>
-    objetModele('old_tyre', [x, 0, z], { masse: 9, taille: 0.65, forme: 'cylindre', son: 'caoutchouc', nom: 'pneu', rebond: 0.35 }));
+    objetModele('old_tyre', [x, 0, z], { masse: 9, taille: 0.65, forme: 'boite', son: 'caoutchouc', nom: 'pneu', rebond: 0.35 }));
   for (let i = 0; i < 4; i++) objetModele('plastic_crate_02', [-30.9, (i % 2) * 0.32, -9.2 + Math.floor(i / 2) * 0.62], { masse: 1.5, taille: 0.55, son: 'plastique', nom: 'caisse plastique' });
   objetModele('metal_toolbox', [-18.2, 0, -9.3], { masse: 6, taille: 0.5, son: 'metal', nom: 'caisse à outils' });
   objetModele('sledgehammer_01', [-18.4, 0, 3.4], { masse: 5, taille: 0.9, son: 'metal', nom: 'masse' });
@@ -520,8 +521,19 @@ function construireEntrepot() {
     B([1.2, 0.03, 0.8], M.bois, { pos: [0, 0.05, 0] }),
     ...[-0.35, 0, 0.35].map((z) => B([1.2, 0.09, 0.1], M.bois, { pos: [0, -0.015, z] })),
   ] });
-  const C42 = 0.42, E = 0.44;
-  for (const [dx, etage] of [[-E, 0], [0, 0], [E, 0], [-E / 2, 1], [E / 2, 1], [0, 2]]) caisse([-19 + dx, C42 / 2 + etage * (C42 + 0.005), -6]);
+  // Pyramide de caisses, empilée selon la vraie taille des caisses
+  const premiere = caisse([-19 - 0.47, 0.21, -6]);
+  const dim = premiere.dimensions ?? new THREE.Vector3(0.42, 0.42, 0.42);
+  const E = dim.x + 0.03, H = dim.y + 0.004;
+  const y0 = premiere.dimensions ? 0 : 0.21;
+  premiere.corps.setTranslation({ x: -19 - E, y: y0, z: -6 }, true);
+  premiere.depart.pos = [-19 - E, y0, -6];
+  for (const [dx, etage] of [[0, 0], [E, 0], [-E / 2, 1], [E / 2, 1], [0, 2]]) {
+    const o = caisse([-19 + dx, 0.21, -6]);
+    const y = etage * H + (premiere.dimensions ? 0 : 0.21);
+    o.corps.setTranslation({ x: -19 + dx, y, z: -6 }, true);
+    o.depart.pos = [-19 + dx, y, -6];
+  }
   creerObjet({ pos: [-16.5, 0.3, -8], masse: 50, friction: 0.6, son: 'metal', formes: [B([0.7, 0.6, 0.6], M.metal)], nom: 'caisse en métal' });
   if (!objetModele('portable_generator', [-30.6, 0, 0], { taille: 1.1, rot: [0, Math.PI / 2, 0] })) creerObjet({ pos: [-30.6, 0, 0], formes: [B([1.5, 1.5, 2.2], M.acierVert, { pos: [0, 0.75, 0] }), B([1.55, 0.2, 2.25], M.rayures, { pos: [0, 0.1, 0] })] });
 

@@ -14,7 +14,7 @@ export const CG_TENU = groupes(G_TENU, 0xffff & ~G_JOUEUR);             // un ob
 export const CG_JOUEUR = groupes(G_JOUEUR, G_MONDE | G_PNJ);
 export const CG_MAIN = groupes(G_MAIN, G_MONDE | G_MAIN | G_PNJ | G_RAGDOLL | G_TENU);
 export const CG_PNJ = groupes(G_PNJ, G_MONDE | G_MAIN | G_JOUEUR | G_TENU);
-export const CG_RAGDOLL = groupes(G_RAGDOLL, G_MONDE | G_MAIN | G_TENU);
+export const CG_RAGDOLL = groupes(G_RAGDOLL, G_MONDE | G_MAIN | G_TENU | G_RAGDOLL);   // les membres se cognent entre eux
 
 export const GRAVITE = 9.81;
 export const world = new RAPIER.World({ x: 0, y: -GRAVITE, z: 0 });
