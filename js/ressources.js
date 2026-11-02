@@ -2,6 +2,7 @@
 // Sources libres : Poly Haven (CC0) et les exemples three.js (Ferrari).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 const PH = 'https://dl.polyhaven.org/file/ph-assets/';
@@ -79,7 +80,12 @@ export async function chargerRessources(renderer, progression = () => {}) {
     taches.push(suivre(materiauPH(nom, def).then((m) => { ressources.materiaux[nom] = m; })));
   }
 
-  const gltf = new GLTFLoader();
+  // Sur Poly Haven, les textures d'un modèle sont rangées dans Models/jpg/1k/<id>/ et pas à côté du .gltf
+  const gestionnaire = new THREE.LoadingManager();
+  gestionnaire.setURLModifier((url) => url.replace(/\/Models\/gltf\/1k\/([^/]+)\/textures\//, '/Models/jpg/1k/$1/'));
+  const gltf = new GLTFLoader(gestionnaire);
+  const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
+  gltf.setDRACOLoader(draco);
   for (const id of MODELES_PH) {
     taches.push(suivre(gltf.loadAsync(`${PH}Models/gltf/1k/${id}/${id}_1k.gltf`)
       .then((g) => ressources.modeles.set(id, g.scene))
