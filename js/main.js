@@ -160,8 +160,8 @@ const evenements = new RAPIER.EventQueue(true);
 const avant = { saut: false, reset: false, tourne: false };
 const escalade = new THREE.Vector3(), tmp = new THREE.Vector3();
 
-renderer.setAnimationLoop(() => {
-  const dt = THREE.MathUtils.clamp(horloge.getDelta(), 1 / 120, 1 / 45);
+function boucle(dtImpose) {
+  const dt = dtImpose ?? THREE.MathUtils.clamp(horloge.getDelta(), 1 / 120, 1 / 45);
   const enVR = renderer.xr.isPresenting;
   const e = enVR ? lireVR() : lirePC(dt);
   if (!enVR) {
@@ -217,7 +217,10 @@ renderer.setAnimationLoop(() => {
   for (const m of listeMains) m.majVisuel();
   for (const a of animations) a();
   renderer.render(scene, camera);
-});
+}
+renderer.setAnimationLoop(() => boucle());
 
 document.getElementById('chargement')?.remove();
-window.jeu = { world, joueur, mains, objets, renderer, scene, rig, camera };
+// Outils de test depuis la console : jeu.simuler(72) fait avancer le jeu d'une seconde
+window.jeu = { world, joueur, mains, objets, renderer, scene, rig, camera,
+  simuler: (images, dt = 1 / 72) => { for (let i = 0; i < images; i++) boucle(dt); } };
