@@ -11,7 +11,7 @@ const COUPLE_MAX = 25;                            // N·m : force du poignet
 const VITESSE_MAX = 20;                           // m/s
 const ROTATION_MAX = 40;                          // rad/s
 const DISTANCE_LACHER = 0.45;                     // si la main est trop loin de la manette, on lâche
-const ZONE_PRISE = new RAPIER.Ball(0.08);
+const ZONE_PRISE = new RAPIER.Ball(0.1);
 
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion();
 
