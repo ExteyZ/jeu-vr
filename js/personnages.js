@@ -46,17 +46,37 @@ const FILTRE_DEPLACEMENT = groupes(G_PNJ, G_MONDE | G_JOUEUR);
 const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion();
 const HAUT = new THREE.Vector3(0, 1, 0);
 
+// Chaque modèle a été exporté avec une orientation de base différente (racine tournée de ±90°, regard vers +Z ou -Z).
+// "repere" décrit cette orientation : F remet le modèle face à +Z, FR = F × rotation de la racine,
+// et "hauteur" est la hauteur des hanches au repos.
+function repere(modele) {
+  const hanches = modele.getObjectByName('mixamorigHips');
+  const qRacine = hanches.parent.quaternion.clone();
+  const devant = new THREE.Vector3(0, 0, 1).applyQuaternion(qRacine.clone().multiply(hanches.quaternion));
+  const F = new THREE.Quaternion().setFromAxisAngle(HAUT, -Math.atan2(devant.x, devant.z));
+  return { F, FR: F.clone().multiply(qRacine), hauteur: hanches.position.clone().applyQuaternion(qRacine).y };
+}
+
+// Adapte une animation d'un modèle à un autre : seules les hanches dépendent du repère de base,
+// les autres os du squelette Mixamo sont identiques.
 function adapterClip(clip, source, cible) {
   const nomsOs = new Set();
   cible.traverse((o) => { if (o.isBone) nomsOs.add(o.name); });
-  const hanchesSource = source.getObjectByName('mixamorigHips').position.y;
-  const hanchesCible = cible.getObjectByName('mixamorigHips').position.y;
+  const rs = repere(source), rc = repere(cible);
+  const conversion = rc.FR.clone().invert().multiply(rs.FR);
+  const ratio = rc.hauteur / rs.hauteur;
   const c = clip.clone();
   c.tracks = c.tracks.filter((t) => nomsOs.has(t.name.split('.')[0]));
+  const q = new THREE.Quaternion(), p = new THREE.Vector3();
   for (const t of c.tracks) {
-    if (t.name === 'mixamorigHips.position') {
-      const r = hanchesCible / hanchesSource;
-      for (let i = 0; i < t.values.length; i++) t.values[i] *= r;
+    if (t.name === 'mixamorigHips.quaternion') {
+      for (let i = 0; i < t.values.length; i += 4) {
+        q.fromArray(t.values, i).premultiply(conversion).toArray(t.values, i);
+      }
+    } else if (t.name === 'mixamorigHips.position') {
+      for (let i = 0; i < t.values.length; i += 3) {
+        p.fromArray(t.values, i).applyQuaternion(conversion).multiplyScalar(ratio).toArray(t.values, i);
+      }
     }
   }
   return c;
@@ -81,6 +101,7 @@ class Personnage {
     this.racine.position.set(def.pos[0], 0, def.pos[1]);
     this.racine.rotation.y = def.lacet ?? 0;
     this.modele = clonerSquelette(gltf.scene);
+    this.modele.quaternion.copy(repere(gltf.scene).F);   // tous les personnages regardent vers +Z
     this.modele.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;

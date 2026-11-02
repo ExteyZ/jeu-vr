@@ -160,7 +160,9 @@ export class MainPhysique {
       corpsTenus.set(corps.handle, (corpsTenus.get(corps.handle) ?? 0) + 1);
       if (objet && !objet.ragdoll) for (const c of objet.colliders) c.setCollisionGroups(CG_TENU);
     }
-    this.courbures = this.calculerCourbures(corps);
+    // Les doigts se placeront après le prochain pas de physique (formes de l'objet à jour)
+    this.courbures = null;
+    this.doigtsAPlacer = true;
     vibrer(this.cote, 0.6, 40);
     objet?.surPrise?.(objet, this);
   }
@@ -279,6 +281,8 @@ export class MainPhysique {
 
   majVisuel() {
     if (!this.active) return;
+    if (this.doigtsAPlacer && this.tenu) this.courbures = this.calculerCourbures(this.tenu);
+    this.doigtsAPlacer = false;
     this.visuel.groupe.visible = true;
     this.visuel.placer(this.corps);
     this.fantome.groupe.position.copy(this.cible.pos);

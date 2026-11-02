@@ -35,7 +35,7 @@ const ciel = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.Mes
 ciel.renderOrder = -1;
 scene.add(ciel);
 
-scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x6b5a48, 1.15));
+scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15));
 const soleil = new THREE.DirectionalLight(0xfff3e0, 2.4);
 soleil.castShadow = true;
 soleil.shadow.mapSize.set(1024, 1024);
@@ -192,6 +192,7 @@ function lirePC(dt) {
 
 // Sur PC, les mains flottent devant la caméra et visent là où l'on regarde
 const matCam = new THREE.Matrix4(), qCam = new THREE.Quaternion();
+const MAIN_PC = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 const echelle = new THREE.Vector3(), qTmp = new THREE.Quaternion();
 const ancienneMain = { left: new THREE.Vector3(), right: new THREE.Vector3() }, vBrute = new THREE.Vector3();
 
@@ -216,7 +217,7 @@ function majCibles(e, enVR, dt, mesurerVitesse) {
       main.modePC = false;
     } else {
       main.cible.pos.set(cote === 'right' ? 0.2 : -0.2, -0.22, -portee).applyMatrix4(matCam);
-      main.cible.quat.copy(qCam);
+      main.cible.quat.copy(qCam).multiply(MAIN_PC);   // poignet vers soi, doigts vers l'avant, pouce en haut
       main.rayon.origine.setFromMatrixPosition(matCam);
       main.rayon.dir.set(0, 0, -1).applyQuaternion(qCam);
       main.vitesseMain.set(0, 0, 0);

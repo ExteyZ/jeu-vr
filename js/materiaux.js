@@ -127,7 +127,7 @@ export function creerMateriaux() {
     mur: mat({ map: T.mur, roughness: 0.95 }, 2),
     brique: mat({ map: T.brique, roughness: 0.95 }, 1.2),
     parquet: mat({ map: T.parquet, roughness: 0.7 }, 1.5),
-    plafond: mat({ color: 0xe8e8e4, roughness: 1 }, 2, { ombre: false }),
+    plafond: mat({ color: 0xe8e8e4, emissive: 0x9a9a94, roughness: 1 }, 2),
     bois: mat({ map: T.bois, roughness: 0.75 }, 1),
     caisse: new THREE.MeshStandardMaterial({ map: T.caisse, roughness: 0.8 }),
     carton: new THREE.MeshStandardMaterial({ map: T.carton, roughness: 0.9 }),
