@@ -66,7 +66,12 @@ function adapterClip(clip, source, cible) {
   const conversion = rc.FR.clone().invert().multiply(rs.FR);
   const ratio = rc.hauteur / rs.hauteur;
   const c = clip.clone();
-  c.tracks = c.tracks.filter((t) => nomsOs.has(t.name.split('.')[0]));
+  // On garde les rotations de tous les os, mais la position seulement pour les hanches :
+  // sinon les longueurs d'os du modèle source étireraient les bras et les jambes du modèle cible.
+  c.tracks = c.tracks.filter((t) => {
+    const [os, propriete] = t.name.split('.');
+    return nomsOs.has(os) && (propriete === 'quaternion' || (propriete === 'position' && os === 'mixamorigHips'));
+  });
   const q = new THREE.Quaternion(), p = new THREE.Vector3();
   for (const t of c.tracks) {
     if (t.name === 'mixamorigHips.quaternion') {
