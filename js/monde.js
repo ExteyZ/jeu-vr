@@ -106,6 +106,7 @@ export function creerObjet({ pos, rot = [0, 0, 0], formes, masse = 0, friction =
       objet.colliders.push(collider);
     }
 
+    if (f.cache) continue;   // forme de collision seulement : un vrai modèle 3D la recouvre
     if (fixe && fusion && f.type === 'boite') uvMonde(geo, f.taille, f.materiau.userData?.tuile ?? 1);
     const mesh = new THREE.Mesh(geo, f.materiau);
     mesh.position.set(...fp);

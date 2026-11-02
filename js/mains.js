@@ -480,22 +480,23 @@ class ModeleMain {
     return this._invParents.get(parent);
   }
 
-  // Plie chaque doigt jusqu'à ce qu'il touche l'objet
+  // Plie chaque doigt jusqu'à ce que son bout touche l'objet (les doigts serrent toujours un minimum)
   courbesAutour(colliders) {
     const res = [];
     const poses = new Map();
     const pt = new THREE.Vector3();
     this.groupe.updateMatrixWorld(true);
     for (let d = 0; d < 5; d++) {
+      const minimum = d === 0 ? 0.3 : 0.4;
       let c = 1;
-      for (let k = 1; k <= 12; k++) {
-        const t = k / 12;
+      for (let k = 1; k <= 16; k++) {
+        const t = minimum + (1 - minimum) * (k / 16);
         this.poserDoigt(d, t, poses);
-        const touche = DOIGTS[d].slice(1).some((n) => {
+        const touche = DOIGTS[d].slice(-2).some((n) => {
           pt.copy(poses.get(n).p).applyMatrix4(this.groupe.matrixWorld);
-          return colliders.some((col) => distanceSurface(col, pt) < 0.01);
+          return colliders.some((col) => distanceSurface(col, pt) < 0.007);
         });
-        if (touche) { c = Math.max(0, t - 0.05); break; }
+        if (touche) { c = t; break; }
       }
       res.push(c);
     }

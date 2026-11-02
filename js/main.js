@@ -8,12 +8,15 @@ import { Inventaire } from './inventaire.js';
 import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
+import { chargerRessources, ressources } from './ressources.js';
 
 // --- Rendu ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // rendu "photo" : hautes lumières douces
+renderer.toneMappingExposure = 0.9;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 renderer.xr.setFoveation(1);
@@ -35,8 +38,27 @@ const ciel = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.Mes
 ciel.renderOrder = -1;
 scene.add(ciel);
 
-scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15));
-const soleil = new THREE.DirectionalLight(0xfff3e0, 2.4);
+// Ciel photo (HDRI), matériaux et modèles réalistes
+const ecranChargement = document.getElementById('chargement');
+await chargerRessources(renderer, (f) => {
+  if (ecranChargement) ecranChargement.textContent = `Chargement du Complexe Delta… ${Math.round(f * 100)} %`;
+});
+const ambiance = new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15);
+if (ressources.environnement) {
+  scene.environment = ressources.environnement;   // reflets et lumière ambiante venant du vrai ciel
+  scene.background = ressources.ciel;
+  scene.fog.color.set(0xc3d0dc);
+  ciel.visible = false;
+  ambiance.intensity = 0.35;
+}
+scene.add(ambiance);
+// Lampes intérieures (sans ombres, pour rester fluide sur le Quest)
+const lampeHall = new THREE.PointLight(0xfff0d8, 22, 16, 1.6);
+lampeHall.position.set(0, 4.1, 16);
+const lampeEntrepot = new THREE.PointLight(0xfff0d8, 40, 24, 1.6);
+lampeEntrepot.position.set(-23, 6.4, 0);
+scene.add(lampeHall, lampeEntrepot);
+const soleil = new THREE.DirectionalLight(0xfff3e0, 2.8);
 soleil.castShadow = true;
 soleil.shadow.mapSize.set(1024, 1024);
 Object.assign(soleil.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 });

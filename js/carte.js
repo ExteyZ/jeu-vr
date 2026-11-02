@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer } from './monde.js';
 import { creerMateriaux, texturePanneau, textureEnseigne } from './materiaux.js';
 import { jouerSon } from './sons.js';
+import { ressources, copieModele } from './ressources.js';
 
 const B = (taille, materiau, extra = {}) => ({ type: 'boite', taille, materiau, ...extra });
 const C = (rayon, hauteur, materiau, extra = {}) => ({ type: 'cylindre', rayon, hauteur, materiau, ...extra });
@@ -57,6 +58,65 @@ function plafonnier(x, y, z, l = 1.2) {
   ajouterDecor(new THREE.BoxGeometry(l, 0.04, 0.3), M.lampe, [x, y, z]);
 }
 
+// --- Vrais modèles 3D (Poly Haven, CC0) avec une forme de collision ajustée à leur taille ---
+// forme : 'boite' | 'cylindre' | 'boule' | 'poteau' (fin poteau au pied du modèle) | 'aucune'
+// taille = plus grande dimension voulue (m) ; hauteur = hauteur voulue (m) ; sinon taille réelle du modèle
+const taillesSources = new Map();
+function objetModele(id, pos, { masse = 0, rot = [0, 0, 0], forme = 'boite', son, nom = id, taille, hauteur,
+  friction, rebond, amortissement, ombre = true } = {}) {
+  if (!ressources.modeles.has(id)) return null;
+  if (!taillesSources.has(id)) taillesSources.set(id, copieModele(id, 1).boite.getSize(new THREE.Vector3()));
+  const t0 = taillesSources.get(id);
+  const echelle = taille ? taille / Math.max(t0.x, t0.y, t0.z) : hauteur ? hauteur / t0.y : 1;
+  const { modele, boite } = copieModele(id, echelle);
+  // Le point le plus bas du modèle est posé à la hauteur "pos"
+  modele.position.y -= boite.min.y;
+  boite.translate(new THREE.Vector3(0, -boite.min.y, 0));
+  const t = boite.getSize(new THREE.Vector3()), c = boite.getCenter(new THREE.Vector3());
+  let formes = [];
+  if (forme === 'boite') formes = [{ type: 'boite', taille: [t.x, t.y, t.z], pos: [c.x, c.y, c.z] }];
+  else if (forme === 'cylindre') formes = [{ type: 'cylindre', rayon: Math.max(t.x, t.z) / 2, hauteur: t.y, pos: [c.x, c.y, c.z] }];
+  else if (forme === 'boule') formes = [{ type: 'boule', rayon: Math.max(t.x, t.y, t.z) / 2, pos: [c.x, c.y, c.z] }];
+  else if (forme === 'poteau') formes = [{ type: 'cylindre', rayon: 0.09, hauteur: t.y, pos: [0, t.y / 2, 0] }];
+  formes.forEach((f) => { f.cache = true; });
+  const o = creerObjet({ pos, rot, masse, son, nom, formes, fusion: false, friction, rebond, amortissement });
+  if (!ombre) modele.traverse((m) => { if (m.isMesh) m.castShadow = false; });
+  o.groupe.add(modele);
+  if (masse > 0) {
+    const b = new THREE.Box3().setFromObject(o.groupe);
+    const s = b.getSize(new THREE.Vector3());
+    o.tailleMax = Math.max(s.x, s.y, s.z);
+  }
+  return o;
+}
+
+// Voiture réaliste (Ferrari des exemples three.js), garée et immobile
+function voiture(x, z, rotY) {
+  if (!ressources.ferrari) return false;
+  const modele = ressources.ferrari.clone(true);
+  const carrosserie = new THREE.MeshPhysicalMaterial({ color: 0x8c0c10, metalness: 0.85, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.03 });
+  const details = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.35 });
+  const vitre = new THREE.MeshStandardMaterial({ color: 0x14181e, metalness: 0.4, roughness: 0.04, transparent: true, opacity: 0.6 });
+  const corps = modele.getObjectByName('body');
+  if (corps) corps.material = carrosserie;
+  for (const n of ['rim_fl', 'rim_fr', 'rim_rr', 'rim_rl', 'trim']) { const o = modele.getObjectByName(n); if (o) o.material = details; }
+  const verre = modele.getObjectByName('glass');
+  if (verre) verre.material = vitre;
+  modele.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  modele.updateMatrixWorld(true);
+  let boite = new THREE.Box3().setFromObject(modele);
+  const t0 = boite.getSize(new THREE.Vector3());
+  modele.scale.setScalar(4.5 / Math.max(t0.x, t0.z));
+  modele.updateMatrixWorld(true);
+  boite = new THREE.Box3().setFromObject(modele);
+  const t = boite.getSize(new THREE.Vector3()), c = boite.getCenter(new THREE.Vector3());
+  modele.position.y = -boite.min.y;
+  const o = creerObjet({ pos: [x, 0, z], rot: [0, rotY, 0], fusion: false, son: 'metal',
+    formes: [{ type: 'boite', taille: [t.x, t.y * 0.85, t.z], pos: [c.x, t.y * 0.425, c.z], cache: true }] });
+  o.groupe.add(modele);
+  return true;
+}
+
 // --- Mobilier et objets ---
 function table(x, z, l = 1.6, p = 0.8, h = 0.78, materiau = M.bois, rot = 0) {
   const pieds = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
@@ -65,6 +125,7 @@ function table(x, z, l = 1.6, p = 0.8, h = 0.78, materiau = M.bois, rot = 0) {
 }
 
 function banc(x, z, rot) {
+  if (objetModele('painted_wooden_bench', [x, 0, z], { rot: [0, rot, 0], hauteur: 0.85 })) return;
   creerObjet({ pos: [x, 0, z], rot: [0, rot, 0], formes: [
     B([1.6, 0.05, 0.4], M.bois, { pos: [0, 0.45, 0] }),
     B([1.6, 0.4, 0.05], M.bois, { pos: [0, 0.7, -0.19] }),
@@ -74,32 +135,45 @@ function banc(x, z, rot) {
 }
 
 function arbre(x, z, taille = 1) {
+  // Massif d'arbustes dans un bac en bois
+  if (objetModele('planter_box_01', [x, 0, z], { rot: [0, alea(0, 3), 0] })) {
+    objetModele('shrub_03', [x, 0.35, z], { forme: 'aucune', hauteur: 1.6 * taille, rot: [0, alea(0, 6), 0] });
+    return;
+  }
   creerObjet({ pos: [x, 1.3 * taille, z], formes: [C(0.18 * taille, 2.6 * taille, M.ecorce)] });
   const boules = [[0, 3.2, 0, 1.3], [0.7, 2.8, 0.3, 1.0], [-0.6, 3.5, -0.4, 0.95], [0.1, 3.9, 0.5, 0.8]];
   boules.forEach(([dx, y, dz, r], i) => ajouterDecor(new THREE.IcosahedronGeometry(r * taille, 1),
     i % 2 ? M.feuillageClair : M.feuillage, [x + dx * taille, y * taille, z + dz * taille], [alea(0, 3), alea(0, 3), 0]));
 }
 
-function lampadaire(x, z) {
+function lampadaire(x, z, rot = 0) {
+  if (objetModele('street_lamp_02', [x, 0, z], { forme: 'poteau', hauteur: 3.8, rot: [0, rot, 0] })) return;
   creerObjet({ pos: [x, 1.75, z], formes: [C(0.06, 3.5, M.fonte)] });
   ajouterDecor(new THREE.SphereGeometry(0.18, 12, 8), M.lampe, [x, 3.6, z]);
 }
 
 function plante(x, z) {
+  if (objetModele('potted_plant_04', [x, 0, z], { forme: 'cylindre', hauteur: 1.1, rot: [0, alea(0, 6), 0] })) return;
   creerObjet({ pos: [x, 0.25, z], formes: [C(0.25, 0.5, M.couleur(0xb5643c, 0.9))] });
   ajouterDecor(new THREE.IcosahedronGeometry(0.45, 1), M.feuillage, [x, 0.85, z]);
 }
 
 function carton(pos, taille = 0.3, masse = 0.6) {
+  const o = objetModele('cardboard_box_01', [pos[0], pos[1] - taille * 0.4, pos[2]], { masse, taille, son: 'carton', nom: 'carton', rot: [0, alea(-0.3, 0.3), 0] });
+  if (o) return o;
   return creerObjet({ pos, masse, son: 'carton', formes: [B([taille, taille * 0.8, taille], M.carton)], nom: 'carton' });
 }
 function caisse(pos, c = 0.42, masse = 8) {
+  const o = objetModele('wooden_crate_02', [pos[0], pos[1] - c / 2, pos[2]], { masse, taille: c, son: 'bois', nom: 'caisse' });
+  if (o) return o;
   return creerObjet({ pos, masse, son: 'bois', formes: [B([c, c, c], M.caisse)], nom: 'caisse' });
 }
 function balle(pos, couleur, rayon = 0.065, masse = 0.25) {
   return creerObjet({ pos, masse, rebond: 0.8, son: 'caoutchouc', formes: [S(rayon, M.couleur(couleur, 0.5))], nom: 'balle' });
 }
 function baril(pos, materiau) {
+  const o = objetModele('Barrel_01', [pos[0], pos[1] - 0.44, pos[2]], { masse: 20, hauteur: 0.88, forme: 'cylindre', son: 'metal', nom: 'baril', friction: 0.6, rot: [0, alea(0, 6), 0] });
+  if (o) return o;
   return creerObjet({ pos, masse: 20, son: 'metal', friction: 0.6, formes: [C(0.29, 0.88, materiau),
     C(0.295, 0.03, M.fonte, { pos: [0, 0.3, 0], visuel: true }), C(0.295, 0.03, M.fonte, { pos: [0, -0.3, 0], visuel: true })], nom: 'baril' });
 }
@@ -124,11 +198,14 @@ function porte(xc, zc, axe, largeur, sens = 1, materiau = M.bois, hauteur = 2.12
 }
 
 function bureau(x, z, rot) {
-  creerObjet({ pos: [x, 0, z], rot: [0, rot, 0], formes: [
+  const pieds = objetModele('metal_office_desk', [x, 0, z], { rot: [0, rot, 0], hauteur: 0.76 }) ? [] : [
     B([1.4, 0.04, 0.7], M.bois, { pos: [0, 0.74, 0] }),
     B([0.04, 0.72, 0.66], M.acierGris, { pos: [-0.66, 0.36, 0] }),
     B([0.04, 0.72, 0.66], M.acierGris, { pos: [0.66, 0.36, 0] }),
     B([1.3, 0.4, 0.02], M.acierGris, { pos: [0, 0.5, -0.32] }),
+  ];
+  creerObjet({ pos: [x, 0, z], rot: [0, rot, 0], formes: [
+    ...pieds,
     // écran
     B([0.56, 0.34, 0.03], M.ecranNoir, { pos: [0, 1.06, -0.2] }),
     B([0.5, 0.29, 0.005], M.ecran, { pos: [0, 1.06, -0.183], visuel: true }),
@@ -146,6 +223,7 @@ function bureau(x, z, rot) {
 }
 
 function chaise(x, z, rot) {
+  if (objetModele('modern_arm_chair_01', [x, 0, z], { rot: [0, rot, 0], masse: 12, hauteur: 0.95, son: 'plastique', nom: 'chaise', friction: 0.4 })) return;
   creerObjet({ pos: [x, 0.03, z], rot: [0, rot, 0], masse: 9, son: 'plastique', nom: 'chaise', formes: [
     C(0.3, 0.05, M.fonte, { friction: 0.25 }),
     C(0.03, 0.38, M.chrome, { pos: [0, 0.22, 0] }),
@@ -231,6 +309,8 @@ function lanceBalles(pos, munitions) {
 }
 
 function marteau(pos) {
+  const o = objetModele('wooden_hammer_01', [pos[0], pos[1] - 0.03, pos[2]], { masse: 0.8, taille: 0.33, son: 'bois', nom: 'marteau' });
+  if (o) return o;
   return creerObjet({ pos, masse: 1.1, son: 'metal', nom: 'marteau', formes: [
     C(0.016, 0.32, M.bois, { rot: SUR_X }),
     B([0.05, 0.05, 0.13], M.fonte, { pos: [0.17, 0, 0] }),
@@ -241,7 +321,14 @@ function marteau(pos) {
 export function construireCarte() {
   M = creerMateriaux();
 
-  // Sol général (herbe) et ciel
+  // Matériaux photo réalistes (Poly Haven) à la place des textures dessinées, quand ils sont chargés
+  const P = ressources.materiaux;
+  const remplacements = { herbe: 'herbe', pave: 'pave', beton: 'beton', brique: 'brique', mur: 'platre', carrelage: 'marbre',
+    parquet: 'parquet', plafond: 'plafond', tour: 'planches', bois: 'planches' };
+  for (const [cle, ph] of Object.entries(remplacements)) if (P[ph]) M[cle] = P[ph];
+  for (const nom of ['platre', 'plafond', 'marbre', 'parquet']) if (P[nom]) P[nom].envMapIntensity = 0.55;   // intérieur moins éclairé par le ciel
+
+  // Sol général (herbe)
   creerObjet({ pos: [0, -0.1, -4], formes: [B([120, 0.2, 120], M.herbe)], son: 'herbe' });
 
   construireHall();
@@ -284,10 +371,13 @@ function construireHall() {
   for (const p of [[2.75, 0.87, 15.4], [2.98, 0.87, 15.4], [2.865, 1.04, 15.4], [2.8, 0.87, 15.75]]) carton(p, 0.2, 0.4);
   balle([3.6, 0.86, 15.65], 0xd63c3c);
   balle([3.8, 0.86, 15.4], 0x3c7bd6);
-  creerObjet({ pos: [4.05, 0.85, 15.7], masse: 0.9, nom: 'cube', formes: [B([0.12, 0.12, 0.12], M.bois)] });
-  creerObjet({ pos: [3.5, 0.81, 15.2], masse: 0.9, nom: 'bâton', formes: [B([0.9, 0.045, 0.045], M.bois)] });
+  if (!objetModele('football', [4.0, 0.785, 15.72], { masse: 0.43, taille: 0.22, forme: 'boule', rebond: 0.7, son: 'caoutchouc', nom: 'ballon de foot' }))
+    creerObjet({ pos: [4.05, 0.85, 15.7], masse: 0.9, nom: 'cube', formes: [B([0.12, 0.12, 0.12], M.bois)] });
+  if (!objetModele('baseball_bat', [3.5, 0.785, 15.2], { masse: 0.9, taille: 0.84, son: 'bois', nom: 'batte' }))
+    creerObjet({ pos: [3.5, 0.81, 15.2], masse: 0.9, nom: 'bâton', formes: [B([0.9, 0.045, 0.045], M.bois)] });
   lampeTorche([4.05, 0.91, 15.25]);
   marteau([3.3, 0.81, 15.85]);
+  objetModele('WetFloorSign_01', [1.2, 0, 11.2], { masse: 1.5, hauteur: 0.65, son: 'plastique', nom: 'panneau sol glissant', rot: [0, 0.4, 0] });
 
   // Bac de balles en mousse + lance-balles
   creerObjet({ pos: [2.2, 0, 15.5], formes: [
@@ -366,7 +456,7 @@ function construireCour() {
     formes: [S(0.12, M.couleur(0xd9752b, 0.7))] });
 
   // Voiture garée
-  creerObjet({ pos: [-9.6, 0, 5.8], formes: [
+  if (!voiture(-9.6, 5.8, Math.PI / 2)) creerObjet({ pos: [-9.6, 0, 5.8], formes: [
     B([4.2, 0.7, 1.8], M.acierBleu, { pos: [0, 0.65, 0] }),
     B([2.3, 0.62, 1.62], M.verreSombre, { pos: [-0.2, 1.31, 0] }),
     B([2.25, 0.05, 1.6], M.acierBleu, { pos: [-0.2, 1.64, 0] }),
@@ -378,14 +468,16 @@ function construireCour() {
   ] });
 
   // Table de pique-nique
-  creerObjet({ pos: [7, 0, 4.5], formes: [
+  if (!objetModele('wooden_picnic_table', [7, 0, 4.5], { hauteur: 0.76 })) creerObjet({ pos: [7, 0, 4.5], formes: [
     B([1.8, 0.06, 0.8], M.bois, { pos: [0, 0.76, 0] }),
     B([1.8, 0.05, 0.3], M.bois, { pos: [0, 0.45, 0.62] }),
     B([1.8, 0.05, 0.3], M.bois, { pos: [0, 0.45, -0.62] }),
     B([0.08, 0.76, 1.5], M.bois, { pos: [-0.7, 0.38, 0] }),
     B([0.08, 0.76, 1.5], M.bois, { pos: [0.7, 0.38, 0] }),
   ] });
-  creerObjet({ pos: [6.6, 0.9, 4.5], masse: 0.43, rebond: 0.7, son: 'caoutchouc', nom: 'ballon de foot', formes: [S(0.11, M.blanc)] });
+  if (!objetModele('football', [6.6, 0.85, 4.5], { masse: 0.43, taille: 0.22, forme: 'boule', rebond: 0.7, son: 'caoutchouc', nom: 'ballon de foot' }))
+    creerObjet({ pos: [6.6, 0.9, 4.5], masse: 0.43, rebond: 0.7, son: 'caoutchouc', nom: 'ballon de foot', formes: [S(0.11, M.blanc)] });
+  for (const [x, z] of [[-12.8, 9.1], [12.9, -1.5]]) objetModele('metal_trash_can', [x, 0, z], { masse: 9, hauteur: 0.95, forme: 'cylindre', son: 'metal', nom: 'poubelle' });
   creerObjet({ pos: [7.3, 0.8, 4.3], masse: 0.17, son: 'plastique', nom: 'frisbee', formes: [C(0.13, 0.02, M.couleur(0x2ecc71, 0.4))] });
   for (let i = 0; i < 3; i++) creerObjet({ pos: [7.5 + i * 0.1, 0.92, 4.7], masse: 0.5, son: 'plastique', nom: 'bouteille',
     formes: [C(0.035, 0.26, M.couleur([0x3c7bd6, 0xd63c3c, 0x2ecc71][i], 0.2))] });
@@ -418,6 +510,12 @@ function construireEntrepot() {
   // Barils, palettes, caisses
   baril([-17.5, 0.44, 6.2], M.acierBleu); baril([-16.8, 0.44, 6.9], M.acierVert); baril([-17.6, 0.44, 7.5], M.acierBleu);
   creerObjet({ pos: [-16.6, 0.29, 8.4], rot: [Math.PI / 2, 0.4, 0], masse: 20, son: 'metal', formes: [C(0.29, 0.88, M.acierOrange)], nom: 'baril' });
+  // Pneus, caisses en plastique, caisse à outils, masse
+  [[-20.5, 8.8], [-21.6, 8.6], [-22.7, 8.75]].forEach(([x, z]) =>
+    objetModele('old_tyre', [x, 0, z], { masse: 9, taille: 0.65, forme: 'cylindre', son: 'caoutchouc', nom: 'pneu', rebond: 0.35 }));
+  for (let i = 0; i < 4; i++) objetModele('plastic_crate_02', [-30.9, (i % 2) * 0.32, -9.2 + Math.floor(i / 2) * 0.62], { masse: 1.5, taille: 0.55, son: 'plastique', nom: 'caisse plastique' });
+  objetModele('metal_toolbox', [-18.2, 0, -9.3], { masse: 6, taille: 0.5, son: 'metal', nom: 'caisse à outils' });
+  objetModele('sledgehammer_01', [-18.4, 0, 3.4], { masse: 5, taille: 0.9, son: 'metal', nom: 'masse' });
   for (let i = 0; i < 3; i++) creerObjet({ pos: [-29, 0.065 + i * 0.14, 7.2], masse: 12, son: 'bois', nom: 'palette', formes: [
     B([1.2, 0.03, 0.8], M.bois, { pos: [0, 0.05, 0] }),
     ...[-0.35, 0, 0.35].map((z) => B([1.2, 0.09, 0.1], M.bois, { pos: [0, -0.015, z] })),
@@ -425,7 +523,7 @@ function construireEntrepot() {
   const C42 = 0.42, E = 0.44;
   for (const [dx, etage] of [[-E, 0], [0, 0], [E, 0], [-E / 2, 1], [E / 2, 1], [0, 2]]) caisse([-19 + dx, C42 / 2 + etage * (C42 + 0.005), -6]);
   creerObjet({ pos: [-16.5, 0.3, -8], masse: 50, friction: 0.6, son: 'metal', formes: [B([0.7, 0.6, 0.6], M.metal)], nom: 'caisse en métal' });
-  creerObjet({ pos: [-30.6, 0, 0], formes: [B([1.5, 1.5, 2.2], M.acierVert, { pos: [0, 0.75, 0] }), B([1.55, 0.2, 2.25], M.rayures, { pos: [0, 0.1, 0] })] });
+  if (!objetModele('portable_generator', [-30.6, 0, 0], { taille: 1.1, rot: [0, Math.PI / 2, 0] })) creerObjet({ pos: [-30.6, 0, 0], formes: [B([1.5, 1.5, 2.2], M.acierVert, { pos: [0, 0.75, 0] }), B([1.55, 0.2, 2.25], M.rayures, { pos: [0, 0.1, 0] })] });
 
   // Mezzanine (3 m) avec escalier, échelle et garde-corps
   bloc([-29.25, 2.9, 6], [5.5, 0.2, 8], M.beton);
@@ -502,11 +600,14 @@ function construireBureaux() {
   plante(14.6, 9.4); plante(21.4, -0.5);
 
   // Salle 2 : salle de pause et labo
-  creerObjet({ pos: [26.5, 0, 8.7], formes: [
-    B([2.4, 0.45, 0.9], M.tissuRouge, { pos: [0, 0.225, 0] }), B([2.4, 0.5, 0.2], M.tissuRouge, { pos: [0, 0.7, 0.35] }),
-    B([0.2, 0.3, 0.9], M.tissuRouge, { pos: [-1.2, 0.6, 0] }), B([0.2, 0.3, 0.9], M.tissuRouge, { pos: [1.2, 0.6, 0] }),
-  ] });
-  for (const x of [25.8, 27.2]) creerObjet({ pos: [x, 0.55, 8.6], masse: 0.5, son: 'carton', nom: 'coussin', formes: [B([0.45, 0.14, 0.45], M.tissu)] });
+  if (!objetModele('Sofa_01', [26.5, 0, 8.9], { taille: 2.2, rot: [0, Math.PI, 0] })) {
+    creerObjet({ pos: [26.5, 0, 8.7], formes: [
+      B([2.4, 0.45, 0.9], M.tissuRouge, { pos: [0, 0.225, 0] }), B([2.4, 0.5, 0.2], M.tissuRouge, { pos: [0, 0.7, 0.35] }),
+      B([0.2, 0.3, 0.9], M.tissuRouge, { pos: [-1.2, 0.6, 0] }), B([0.2, 0.3, 0.9], M.tissuRouge, { pos: [1.2, 0.6, 0] }),
+    ] });
+    for (const x of [25.8, 27.2]) creerObjet({ pos: [x, 0.55, 8.6], masse: 0.5, son: 'carton', nom: 'coussin', formes: [B([0.45, 0.14, 0.45], M.tissu)] });
+  }
+  objetModele('vintage_microwave', [25.75, 0.9, -4.2], { taille: 0.5 });
   table(26.5, 6.6, 1.2, 0.6, 0.45);
   creerObjet({ pos: [26.3, 0.5, 6.6], masse: 0.3, son: 'plastique', nom: 'tasse', formes: [C(0.04, 0.1, M.couleur(0xd63c3c, 0.3))] });
   creerObjet({ pos: [26.8, 0.47, 6.5], masse: 0.4, son: 'plastique', nom: 'télécommande', formes: [B([0.05, 0.025, 0.18], M.couleur(0x23262b, 0.5))] });
