@@ -147,7 +147,10 @@ export async function creerPersonnages(definitions) {
 }
 
 // Adapte une animation : on garde les rotations des os, la position seulement pour la racine (mise à l'échelle)
-function adapterClip(clip, modele, racine, ratio = 1) {
+// repereRacine = matrice du parent de la racine (pour raisonner dans le monde) : on retire l'avancée
+// de la racine au fil de l'animation (le personnage avance par le code, pas par l'animation)
+// tout en gardant les petits balancements des hanches.
+function adapterClip(clip, modele, racine, ratio = 1, repereRacine = null) {
   const noms = new Set();
   modele.traverse((o) => { if (o.isBone) noms.add(o.name); });
   const c = clip.clone();
@@ -155,7 +158,22 @@ function adapterClip(clip, modele, racine, ratio = 1) {
     const [os, prop] = t.name.split('.');
     return noms.has(os) && (prop === 'quaternion' || (prop === 'position' && os === racine));
   });
-  if (ratio !== 1) for (const t of c.tracks) if (t.name.endsWith('.position')) for (let i = 0; i < t.values.length; i++) t.values[i] *= ratio;
+  const piste = c.tracks.find((t) => t.name === racine + '.position');
+  if (piste) {
+    const v = new THREE.Vector3(), debut = new THREE.Vector3(), derive = new THREE.Vector3();
+    const n = piste.times.length, duree = piste.times[n - 1] || 1;
+    if (repereRacine) {
+      const inverse = repereRacine.clone().invert();
+      debut.fromArray(piste.values, 0).multiplyScalar(ratio).applyMatrix4(repereRacine);
+      derive.fromArray(piste.values, (n - 1) * 3).multiplyScalar(ratio).applyMatrix4(repereRacine).sub(debut);
+      derive.y = 0;
+      for (let k = 0; k < n; k++) {
+        v.fromArray(piste.values, k * 3).multiplyScalar(ratio).applyMatrix4(repereRacine);
+        v.addScaledVector(derive, -piste.times[k] / duree);
+        v.applyMatrix4(inverse).toArray(piste.values, k * 3);
+      }
+    } else if (ratio !== 1) for (let i = 0; i < piste.values.length; i++) piste.values[i] *= ratio;
+  }
   return c;
 }
 
@@ -205,8 +223,12 @@ class Personnage {
         const hauteurAnim = new THREE.Vector3().fromArray(piste.values, 0).applyMatrix4(racineAnim.parent.matrixWorld).y;
         if (hauteurAnim > 0.3) ratio = THREE.MathUtils.clamp(hauteurRepos / hauteurAnim, 0.8, 1.25);
       }
-      this.actions[nom] = this.mixer.clipAction(adapterClip(clip, this.modele, this.nomRacineAnim, ratio));
+      const repere = squelette === 'biped' ? racineAnim.parent.matrixWorld.clone() : null;
+      this.actions[nom] = this.mixer.clipAction(adapterClip(clip, this.modele, this.nomRacineAnim, ratio, repere));
     }
+    // Position de repos de chaque os (la chute physique les déplace, on les remet en se relevant)
+    this.positionsRepos = new Map();
+    this.modele.traverse((o) => { if (o.isBone) this.positionsRepos.set(o, o.position.clone()); });
     for (const g of ['salut', 'colere']) if (this.actions[g]) { this.actions[g].setLoop(THREE.LoopOnce); this.actions[g].clampWhenFinished = false; }
     this.mixer.addEventListener('finished', () => this.jouer(this.etat === 'marche' ? 'marche' : 'idle'));
     this.actionCourante = 'idle';
@@ -477,6 +499,7 @@ class Personnage {
       world.removeRigidBody(p.corps);
     }
     this.parties = null;
+    for (const [os, p] of this.positionsRepos) os.position.copy(p);
     this.corps.setTranslation({ x: pos.x, y: CENTRE_CAPSULE, z: pos.z }, true);
     this.collider.setEnabled(true);
     this.etat = 'parle';
