@@ -3,25 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bac à sable VR</title>
+  <title>Complexe Delta VR</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2430; font-family: system-ui, sans-serif; }
-    #aide { position: fixed; top: 12px; left: 12px; max-width: 380px; padding: 12px 14px; border-radius: 10px;
+    #aide { position: fixed; top: 12px; left: 12px; max-width: 400px; padding: 12px 14px; border-radius: 10px;
       background: rgba(15, 20, 28, 0.8); color: #e8eef5; font-size: 14px; line-height: 1.5; }
     #aide h1 { font-size: 16px; margin: 0 0 6px; }
     #aide b { color: #f2b134; }
+    #message { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 20px;
+      background: rgba(15, 20, 28, 0.85); color: #fff; font-size: 16px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
     #chargement { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center;
       background: #1b2430; color: #e8eef5; font-size: 20px; z-index: 10; }
   </style>
 </head>
 <body>
-  <div id="chargement">Chargement du moteur physique…</div>
+  <div id="chargement">Chargement du Complexe Delta…</div>
   <div id="aide">
-    <h1>Bac à sable physique</h1>
+    <h1>Complexe Delta</h1>
     <b>Dans le casque :</b> appuie sur « ENTER VR » en bas de l'écran.<br>
-    <b>Sur PC :</b> clique dans la scène, puis ZQSD pour marcher, souris pour regarder, Espace pour sauter, Maj pour courir.
-    Clic gauche / droit : attraper avec la main droite / gauche. Molette : avancer les mains. R : tout remettre en place.
+    <b>Sur PC :</b> clique dans la scène, puis ZQSD pour marcher, souris pour regarder, Espace pour sauter,
+    Maj pour courir, C pour s'accroupir. Clic gauche / droit : attraper avec la main droite / gauche.
+    E : utiliser l'objet tenu. Molette : avancer les mains. R : tout remettre en place. X : revenir au hall.
   </div>
+  <div id="message"></div>
 
   <script>
     function montrerErreur(message) {
@@ -30,7 +34,7 @@
       el.textContent = 'Erreur : ' + message;
     }
     addEventListener('error', (e) => montrerErreur(e.message));
-    addEventListener('unhandledrejection', (e) => montrerErreur(e.reason?.message || e.reason));
+    addEventListener('unhandledrejection', (e) => console.error(e.reason));
   </script>
   <script type="importmap">
     {

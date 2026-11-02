@@ -56,7 +56,8 @@ export class Joueur {
   }
 
   // stick : {x, y} du joystick (-1..1) ; escalade : décalage demandé par les mains accrochées (ou null)
-  maj(dt, { stick, course, saut, escalade }) {
+  // accroupi : de combien (en m) on baisse la vue, comme si on s'accroupissait
+  maj(dt, { stick, course, saut, escalade, accroupi = 0 }) {
     this.rig.updateMatrixWorld(true);
     this.teteMonde(tete);
     const c = this.corps.translation();
@@ -98,7 +99,7 @@ export class Joueur {
     // 5. Le "rig" VR suit le corps : la tête reste au-dessus de la capsule
     this.rig.position.x += n.x - tete.x;
     this.rig.position.z += n.z - tete.z;
-    this.rig.position.y = n.y - CENTRE;
+    this.rig.position.y = n.y - CENTRE - accroupi;
 
     if (this.rig.position.y < -15) this.reapparaitre();
   }
@@ -107,5 +108,11 @@ export class Joueur {
     this.corps.setTranslation({ x: this.depart.x, y: this.depart.y + CENTRE, z: this.depart.z }, true);
     this.rig.position.copy(this.depart);
     this.vy = 0;
+  }
+
+  // Pieds du joueur, en coordonnées du monde
+  pieds(out) {
+    const c = this.corps.translation();
+    return out.set(c.x, c.y - CENTRE, c.z);
   }
 }
