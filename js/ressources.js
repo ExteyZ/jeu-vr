@@ -20,6 +20,11 @@ export const MATERIAUX_PH = {
   plafond: { id: 'ceiling_interior', tuile: 2, cartes: ['diff'] },
   planches: { id: 'brown_planks_05', tuile: 2, cartes: ['diff', 'nor_gl'] },
   betonMur: { id: 'concrete_wall_004', tuile: 3, cartes: ['diff', 'nor_gl'] },
+  // Vallée suisse
+  roche: { id: 'aerial_rocks_02', tuile: 4, cartes: ['diff', 'nor_gl'] },
+  sable: { id: 'gravelly_sand', tuile: 2, cartes: ['diff'] },
+  pierre: { id: 'rock_wall_04', tuile: 2, cartes: ['diff', 'nor_gl'] },
+  toit: { id: 'clay_roof_tiles_02', tuile: 2, cartes: ['diff', 'nor_gl'] },
 };
 
 // Modèles 3D Poly Haven utilisés dans la carte
@@ -31,7 +36,7 @@ export const MODELES_PH = [
   'metal_trash_can', 'WetFloorSign_01', 'portable_generator', 'street_lamp_02',
 ];
 
-export const ressources = { modeles: new Map(), materiaux: {}, ferrari: null, environnement: null, ciel: null };
+export const ressources = { modeles: new Map(), materiaux: {}, ferrari: null, environnement: null, ciel: null, normalesEau: null };
 
 const chargeurTextures = new THREE.TextureLoader();
 chargeurTextures.setCrossOrigin('anonymous');
@@ -96,6 +101,8 @@ export async function chargerRessources(renderer, progression = () => {}) {
 
   taches.push(suivre(gltf.loadAsync(THREE_EXEMPLES + 'ferrari.glb').then((g) => { ressources.ferrari = g.scene; })
     .catch((e) => console.warn('Voiture indisponible', e))));
+  taches.push(suivre(textureAsync('https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/textures/waternormals.jpg')
+    .then((t) => { ressources.normalesEau = t; })));
 
   await Promise.all(taches);
   return ressources;

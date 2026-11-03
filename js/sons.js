@@ -94,6 +94,25 @@ const RECETTES = {
   rangement: (t, o) => { souffle(t, o, { freq: 900, q: 1.5, duree: 0.12, gain: 0.6 }); ton(t, o, { freq: 520, freqFin: 380, duree: 0.08, gain: 0.25 }); return 0.13; },
   tir: (t, o) => { souffle(t, o, { freq: 1500, q: 0.7, duree: 0.06, gain: 1.1 }); ton(t, o, { freq: 320, freqFin: 120, duree: 0.07, gain: 0.5, forme: 'triangle' }); return 0.08; },
   clic: (t, o) => { souffle(t, o, { freq: 4000, q: 3, duree: 0.02, gain: 0.8 }); return 0.03; },
+  eau: (t, o) => {
+    souffle(t, o, { freq: 700, q: 0.8, duree: 0.35, filtre: 'lowpass', gain: 1.4 });
+    for (let i = 0; i < 4; i++) ton(t + 0.05 + i * alea(0.04, 0.09), o, { freq: alea(500, 900), freqFin: alea(1100, 1600), duree: 0.06, gain: 0.25 });
+    return 0.5;
+  },
+  feu: (t, o) => { souffle(t, o, { freq: 900, q: 0.6, duree: 0.45, filtre: 'bandpass', gain: 1.1 }); ton(t, o, { freq: 140, freqFin: 70, duree: 0.4, gain: 0.4, forme: 'sawtooth' }); return 0.5; },
+  explosion: (t, o) => {
+    souffle(t, o, { freq: 180, q: 0.5, duree: 1.1, filtre: 'lowpass', gain: 2.2 });
+    souffle(t, o, { freq: 1800, q: 0.7, duree: 0.25, gain: 0.8 });
+    ton(t, o, { freq: 60, freqFin: 28, duree: 0.9, gain: 1.1 });
+    return 1.2;
+  },
+  toile: (t, o) => { souffle(t, o, { freq: 3200, q: 1.5, duree: 0.12, gain: 0.9 }); ton(t, o, { freq: 1400, freqFin: 400, duree: 0.1, gain: 0.25, forme: 'triangle' }); return 0.15; },
+  magie: (t, o) => {
+    [220, 277, 330].forEach((f, i) => ton(t + i * 0.04, o, { freq: f, freqFin: f * 0.5, duree: 0.7, gain: 0.22, forme: 'triangle', attaque: 0.05 }));
+    souffle(t, o, { freq: 500, q: 2, duree: 0.6, gain: 0.4 });
+    return 0.8;
+  },
+  vent: (t, o) => { souffle(t, o, { freq: 400, q: 0.4, duree: 0.6, filtre: 'lowpass', gain: 0.8 }); return 0.6; },
 };
 
 export function jouerSon(type, pos, intensite = 1) {

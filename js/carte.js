@@ -346,7 +346,7 @@ export function construireCarte() {
   for (const nom of ['platre', 'plafond', 'marbre', 'parquet']) if (P[nom]) P[nom].envMapIntensity = 0.55;   // intérieur moins éclairé par le ciel
 
   // Sol général (herbe)
-  creerObjet({ pos: [0, -0.1, -4], formes: [B([120, 0.2, 120], M.herbe)], son: 'herbe' });
+  // (le sol est désormais le relief de la vallée, voir terrain.js)
 
   construireHall();
   construireCour();
@@ -664,7 +664,7 @@ function construireParcours() {
   solVisuel(0, -19, 28, 18, M.beton);
   mur(-14, -28, -14, -10, 4, M.brique);
   mur(14, -28, 14, -10, 4, M.brique);
-  mur(-14, -28, 14, -28, 4, M.brique);
+  murOuvert(-14, -28, 14, -28, 4, M.brique, 10, 13.5, 4);   // porte vers le lac
 
   // Tour d'escalade de 3,5 m avec prises colorées
   creerObjet({ pos: [8, 1.75, -25.75], formes: [B([3, 3.5, 1.5], M.tour)] });
@@ -715,3 +715,7 @@ function construireParcours() {
 export function retrouverObjet(nom) {
   return objets.find((o) => o.nom === nom);
 }
+
+// Pour les autres parties du monde (village, catalogue d'objets)
+export function materiauxCarte() { return M; }
+export { objetModele, carton, caisse, balle, baril, marteau, lampeTorche, chaise };

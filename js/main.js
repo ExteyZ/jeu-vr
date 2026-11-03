@@ -9,6 +9,9 @@ import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
+import { construireTerrain } from './terrain.js';
+import { construireEau, animerEau, flotter } from './eau.js';
+import { construireVillage } from './village.js';
 
 // --- Rendu ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -24,7 +27,7 @@ document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
 const HORIZON = 0xc9dcee;
-scene.fog = new THREE.Fog(HORIZON, 45, 170);
+scene.fog = new THREE.Fog(HORIZON, 180, 5200);   // brume légère : les montagnes lointaines bleuissent
 scene.background = new THREE.Color(HORIZON);
 const toileCiel = document.createElement('canvas');
 toileCiel.width = 4; toileCiel.height = 256;
@@ -41,7 +44,7 @@ scene.add(ciel);
 // Ciel photo (HDRI), matériaux et modèles réalistes
 const ecranChargement = document.getElementById('chargement');
 await chargerRessources(renderer, (f) => {
-  if (ecranChargement) ecranChargement.textContent = `Chargement du Complexe Delta… ${Math.round(f * 100)} %`;
+  if (ecranChargement) ecranChargement.textContent = `Chargement de la vallée… ${Math.round(f * 100)} %`;
 });
 const ambiance = new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15);
 if (ressources.environnement) {
@@ -69,11 +72,18 @@ scene.add(soleil, soleil.target);
 // --- Joueur : le "rig" contient la caméra (la tête) et les manettes ---
 const rig = new THREE.Group();
 scene.add(rig);
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 400);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 7000);
 camera.position.set(0, 1.65, 0);
 rig.add(camera);
 
+// La vallée suisse (relief, forêts, lac), puis le complexe et le village
+const P = ressources.materiaux;
+const blanc = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+blanc.needsUpdate = true;
+construireTerrain({ herbe: P.herbe?.map ?? blanc, roche: P.roche?.map ?? blanc, sable: P.sable?.map ?? blanc });
+construireEau(ressources.normalesEau);
 const carte = construireCarte();
+construireVillage();
 const joueur = new Joueur(rig, camera, carte.depart);
 const mains = { left: new MainPhysique('left'), right: new MainPhysique('right') };
 const listeMains = Object.values(mains);
@@ -327,7 +337,7 @@ const evenements = new RAPIER.EventQueue(true);
 const avant = { saut: false, reset: false, retour: false, modeRotation: false, tourne: false };
 const escalade = new THREE.Vector3(), tmp = new THREE.Vector3(), tete = new THREE.Vector3();
 let rotationFluide = false, accroupi = 0;
-let images = 0, debutMesure = performance.now(), ips = 0;
+let images = 0, debutMesure = performance.now(), ips = 0, tempsJeu = 0;
 
 function boucle(dtImpose) {
   const dt = dtImpose ?? THREE.MathUtils.clamp(horloge.getDelta(), 1 / 120, 1 / 45);
@@ -380,6 +390,11 @@ function boucle(dtImpose) {
   Object.assign(avant, { saut: e.saut, reset: e.reset, retour: e.retour, modeRotation: e.modeRotation });
 
   // Physique
+  // Flottaison dans le lac (objets et corps tombés)
+  for (const o of objets) if (!o.range && o.volume) flotter(o.corps, o.volume, dt, o);
+  for (const p of personnages) if (p.parties) for (const part of p.parties) flotter(part.corps, part.volume, dt, part);
+  tempsJeu += dt;
+
   world.timestep = dt;
   world.step(evenements);
   evenements.drainCollisionEvents((h1, h2, debut) => {
@@ -424,6 +439,7 @@ function boucle(dtImpose) {
   soleil.target.updateMatrixWorld();
   ciel.position.copy(tete);
   majMessage(dt);
+  animerEau(tempsJeu);
   renderer.render(scene, camera);
   majAuditeur(camera);
 

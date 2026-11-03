@@ -92,9 +92,11 @@ export function creerObjet({ pos, rot = [0, 0, 0], formes, masse = 0, friction =
   const corps = world.createRigidBody(desc);
 
   const physiques = formes.filter((f) => !f.visuel);
-  const densite = fixe ? 1 : masse / physiques.reduce((s, f) => s + volume(f), 0);
+  const volumeTotal = physiques.reduce((s, f) => s + volume(f), 0);
+  const densite = fixe ? 1 : masse / volumeTotal;
   const groupe = new THREE.Group();
-  const objet = { corps, groupe, nom, masse, son, colliders: [], depart: { pos: [...pos], quat: q.clone() } };
+  // volume = eau déplacée quand l'objet est immergé (pour la flottaison)
+  const objet = { corps, groupe, nom, masse, son, volume: volumeTotal, colliders: [], depart: { pos: [...pos], quat: q.clone() } };
   groupe.position.set(...pos);
   groupe.quaternion.copy(q);
   groupe.updateMatrixWorld(true);
@@ -184,4 +186,13 @@ export function distanceSurface(collider, p) {
   if (!proj) return Infinity;
   if (proj.isInside) return 0;
   return Math.hypot(proj.point.x - p.x, proj.point.y - p.y, proj.point.z - p.z);
+}
+
+// Retire complètement un objet mobile du monde (objets créés depuis l'inventaire)
+export function supprimerObjet(o) {
+  for (const c of o.colliders) infos.delete(c.handle);
+  world.removeRigidBody(o.corps);
+  scene.remove(o.groupe);
+  const i = objets.indexOf(o);
+  if (i >= 0) objets.splice(i, 1);
 }

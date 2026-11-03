@@ -429,7 +429,7 @@ class Personnage {
         .setCollisionGroups(CG_RAGDOLL).setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
         .setContactForceEventThreshold(masse * GRAVITE * 4), corps);
       const partie = {
-        def, os, corps, colliders: [collider], masse, son: 'chair', ragdoll: true, pnj: this, nom: this.def.nom,
+        def, os, corps, colliders: [collider], masse, volume, son: 'chair', ragdoll: true, pnj: this, nom: this.def.nom,
         qDecalage: qOs.clone(),                                         // corps créé sans rotation
         pDecalage: def.os === 'hanches' ? pOs.clone().sub(centre) : null,
       };
