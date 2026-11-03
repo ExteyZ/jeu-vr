@@ -77,6 +77,47 @@ const carte = construireCarte();
 const joueur = new Joueur(rig, camera, carte.depart);
 const mains = { left: new MainPhysique('left'), right: new MainPhysique('right') };
 const listeMains = Object.values(mains);
+
+// --- Cadran au poignet gauche : images par seconde (pour vérifier la fluidité dans le casque) ---
+const toileCadran = document.createElement('canvas');
+toileCadran.width = 256; toileCadran.height = 96;
+const texCadran = new THREE.CanvasTexture(toileCadran);
+texCadran.colorSpace = THREE.SRGBColorSpace;
+const cadran = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.03), new THREE.MeshBasicMaterial({ map: texCadran, transparent: true }));
+cadran.position.set(-0.047, 0.085, 0.005);
+cadran.rotation.y = -Math.PI / 2;
+mains.left.visuel.groupe.add(cadran);
+function majCadran() {
+  const g = toileCadran.getContext('2d');
+  g.clearRect(0, 0, 256, 96);
+  g.fillStyle = 'rgba(10,14,20,0.85)';
+  g.beginPath(); g.roundRect(0, 0, 256, 96, 24); g.fill();
+  g.fillStyle = ips >= 68 ? '#5be37d' : ips >= 55 ? '#f2b134' : '#ff6b6b';
+  g.font = 'bold 54px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(`${ips} i/s`, 128, 50);
+  texCadran.needsUpdate = true;
+}
+
+// --- Qualité automatique : si le casque n'arrive pas à suivre 3 secondes de suite, on allège ---
+let qualite = 0, secondesLentes = 0;
+function qualiteAuto(enVR) {
+  if (!enVR) return;
+  secondesLentes = ips < 62 ? secondesLentes + 1 : 0;
+  if (secondesLentes < 3 || qualite >= 2) return;
+  secondesLentes = 0;
+  qualite++;
+  if (qualite === 1) {
+    lampeHall.visible = lampeEntrepot.visible = false;
+    soleil.shadow.mapSize.set(512, 512);
+    soleil.shadow.map?.dispose();
+    soleil.shadow.map = null;
+    message('Qualité réduite pour rester fluide');
+  } else {
+    renderer.shadowMap.enabled = false;
+    scene.traverse((o) => { if (o.material) [o.material].flat().forEach((m) => { m.needsUpdate = true; }); });
+    message('Ombres coupées pour rester fluide');
+  }
+}
 const inventaire = new Inventaire(rig, camera, listeMains);
 crochets.sortir = (main) => inventaire.sortir(main);
 crochets.ranger = (main, objet) => inventaire.ranger(main, objet);
@@ -286,7 +327,7 @@ const evenements = new RAPIER.EventQueue(true);
 const avant = { saut: false, reset: false, retour: false, modeRotation: false, tourne: false };
 const escalade = new THREE.Vector3(), tmp = new THREE.Vector3(), tete = new THREE.Vector3();
 let rotationFluide = false, accroupi = 0;
-let images = 0, chrono = 0, ips = 0;
+let images = 0, debutMesure = performance.now(), ips = 0;
 
 function boucle(dtImpose) {
   const dt = dtImpose ?? THREE.MathUtils.clamp(horloge.getDelta(), 1 / 120, 1 / 45);
@@ -386,8 +427,16 @@ function boucle(dtImpose) {
   renderer.render(scene, camera);
   majAuditeur(camera);
 
-  images++; chrono += dt;
-  if (chrono >= 1) { ips = Math.round(images / chrono); images = 0; chrono = 0; }
+  // Images par seconde mesurées en temps réel (le pas de physique, lui, est plafonné)
+  images++;
+  const maintenantMs = performance.now();
+  if (maintenantMs - debutMesure >= 1000) {
+    ips = Math.round((images * 1000) / (maintenantMs - debutMesure));
+    images = 0;
+    debutMesure = maintenantMs;
+    majCadran();
+    qualiteAuto(enVR);
+  }
 }
 renderer.setAnimationLoop(() => boucle());
 

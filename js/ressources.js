@@ -66,7 +66,9 @@ async function materiauPH(nom, { id, tuile, cartes = ['diff', 'nor_gl', 'arm'] }
 export async function chargerRessources(renderer, progression = () => {}) {
   const taches = [];
   let finies = 0;
-  const suivre = (p) => p.finally(() => progression(++finies / taches.length));
+  // Chaque ressource a 40 s maximum : sur une connexion lente, le jeu démarre quand même (avec des remplacements)
+  const suivre = (p) => Promise.race([p.catch((e) => console.warn(e)), new Promise((ok) => setTimeout(ok, 40000))])
+    .finally(() => progression(++finies / taches.length));
 
   taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr`).then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
@@ -74,7 +76,7 @@ export async function chargerRessources(renderer, progression = () => {}) {
     ressources.environnement = pmrem.fromEquirectangular(hdr).texture;
     ressources.ciel = hdr;
     pmrem.dispose();
-  })));
+  }).catch((e) => console.warn('Ciel photo indisponible', e))));
 
   for (const [nom, def] of Object.entries(MATERIAUX_PH)) {
     taches.push(suivre(materiauPH(nom, def).then((m) => { ressources.materiaux[nom] = m; })));
@@ -107,6 +109,9 @@ export function copieModele(id, echelle = 1) {
   copie.scale.multiplyScalar(echelle);
   copie.updateMatrixWorld(true);
   const boite = new THREE.Box3().setFromObject(copie);
-  copie.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // Les petits objets ne projettent pas d'ombre (gros gain de rapidité sur le Quest, invisible à l'œil)
+  const taille = boite.getSize(new THREE.Vector3());
+  const ombre = Math.max(taille.x, taille.y, taille.z) > 0.35;
+  copie.traverse((o) => { if (o.isMesh) { o.castShadow = ombre; o.receiveShadow = true; } });
   return { modele: copie, boite };
 }
