@@ -18,7 +18,7 @@ const ROTATION_MAX = 40;                // rad/s
 const DISTANCE_LACHER = 0.45;           // si la main tenue est trop loin de la manette, on lâche
 const PORTEE_OBJET = 0.09;              // distance max (jusqu'à la surface) pour attraper un objet
 const PORTEE_PNJ = 0.08;
-const PORTEE_DECOR = 0.035;             // il faut vraiment toucher le décor pour s'y accrocher
+const PORTEE_DECOR = 0.06;              // toucher le décor (barreau, rebord) pour s'y accrocher
 const ZONE_RECHERCHE = new RAPIER.Ball(0.14);
 const ZONE_CHEVAUCHEMENT = new RAPIER.Ball(0.045);
 const ATTRACTION_PORTEE = 9, ATTRACTION_MASSE_MAX = 8;
