@@ -6,11 +6,9 @@ import * as THREE from 'three';
 import { scene } from './monde.js';
 import { horsReflet } from './eau.js';
 import { PROFIL, ULTRA } from './profil.js';
-import { grilleInterieure, fbm, lisse, distanceLac, densiteForet, ombreDesMontagnes, COMPLEXE, VILLAGE, NIVEAU_LAC } from './terrain.js';
+import { grilleInterieure, fbm, lisse, distanceLac, densiteForet, ombreDesMontagnes, VILLE, HAMEAU, NIVEAU_LAC } from './terrain.js';
 import { opaciteLointaine } from './arbres.js';
-import { positionsChalets } from './village.js';
 
-const CHALETS = positionsChalets();
 const uniformes = {
   temps: { value: 0 }, centre: { value: new THREE.Vector3() }, pieds: { value: new THREE.Vector3(0, -1000, 0) },
   tSol: { value: null }, origine: { value: new THREE.Vector2() }, pas: { value: 1 }, n: { value: 1 },
@@ -18,11 +16,9 @@ const uniformes = {
 
 // Densité d'herbe à chaque point de la grille du relief (0 = pas d'herbe)
 function densiteHerbe(x, z, y, penteSol) {
-  if (x > COMPLEXE.x0 - 1 && x < COMPLEXE.x1 + 1 && z > COMPLEXE.z0 - 1 && z < COMPLEXE.z1 + 1) return 0;
+  if (x > VILLE.x0 - 2 && x < VILLE.x1 + 2 && z < VILLE.z1 + 3) return 0;   // la ville est pavée
   if (distanceLac(x, z) < 1.02 || y < NIVEAU_LAC + 0.9) return 0;
-  if (Math.hypot(x - VILLAGE.x, z - VILLAGE.z) < 9) return 0;                 // place de la fontaine
-  for (const c of CHALETS) if (Math.hypot(x - c.x, z - c.z) < Math.max(c.l, c.p) * 0.62) return 0;
-  if (Math.abs(x - 40) < 2.5 && z < -150 && z > -262) return 0;   // chemin du ponton
+  for (const c of HAMEAU) if (Math.hypot(x - c.x, z - c.z) < Math.max(c.l, c.p) * 0.62) return 0;
   let d = 1 - lisse(0.38, 0.58, penteSol);   // l'herbe tient aussi dans les pentes raides (alpages)
   d *= 1 - lisse(290, 400, y);
   d *= 1 - 0.88 * densiteForet(x, z, y);

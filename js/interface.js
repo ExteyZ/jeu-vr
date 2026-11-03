@@ -198,7 +198,7 @@ export class Interface {
     }, { taille: 22 });
     this.bouton(g, 'reset', 670, 126, 320, 60, 'Tout remettre en place', () => { this.actions.replacer(); this.info = 'Objets remis en place'; }, { taille: 22 });
     this.titre(g, 'Se téléporter', 30, 226);
-    [['hall', 'Hall du complexe'], ['ponton', 'Ponton du lac'], ['village', 'Village suisse'], ['belvedere', 'Belvédère du lac'], ['sommet', 'Sommet']].forEach(([id, nom], i) => {
+    [['place', 'Place du village'], ['port', 'Port'], ['hameau', 'Chalets'], ['belvedere', 'Belvédère du lac'], ['sommet', 'Sommet']].forEach(([id, nom], i) => {
       this.bouton(g, 'tp-' + id, 30 + (i % 3) * 330, 246 + Math.floor(i / 3) * 76, 310, 64, nom, () => { this.actions.teleporter(id); this.fermer(); }, { taille: 24 });
     });
     g.fillStyle = '#b8c4d2'; g.font = '20px sans-serif'; g.textAlign = 'left';

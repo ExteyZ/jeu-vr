@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { MeshoptSimplifier } from 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.js';
 import { RAPIER, scene, ajouterSolideLointain } from './monde.js';
 import { PROFIL, ULTRA } from './profil.js';
-import { INTERIEUR, hauteurSol, densiteForet, zoneLibre, aleatoire, fbm, lisse, distanceLac, NIVEAU_LAC } from './terrain.js';
+import { INTERIEUR, VILLE, hauteurSol, densiteForet, zoneLibre, aleatoire, fbm, lisse, distanceLac, NIVEAU_LAC } from './terrain.js';
 import { ressources } from './ressources.js';
 import { horsReflet } from './eau.js';
 
@@ -39,7 +39,7 @@ const HAUT = new THREE.Vector3(0, 1, 0);
 // Convient-il à l'espèce ? (0 à 1)
 function convenance(milieu, x, z, y, penteSol, foret) {
   // Rive du lac : galets et rochers à moitié dans l'eau
-  if (milieu === 'rive') { const dl = distanceLac(x, z); return lisse(0.97, 1.01, dl) * (1 - lisse(1.05, 1.14, dl)) * (Math.abs(x - 40) < 6 && z > -265 ? 0 : 1); }
+  if (milieu === 'rive') { const dl = distanceLac(x, z); return x > VILLE.x0 - 10 && x < VILLE.x1 + 10 && z > -400 ? 0 : lisse(0.97, 1.01, dl) * (1 - lisse(1.05, 1.14, dl)); }   // (pas sur le quai de la ville)
   if (y < NIVEAU_LAC + 0.7 || distanceLac(x, z) < 1.02) return 0;
   const montagne = 1 - lisse(330, 430, y);
   switch (milieu) {

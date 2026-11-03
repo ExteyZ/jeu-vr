@@ -1,16 +1,15 @@
-// Le village suisse au bord du lac (chalets), le ponton avec sa barque, et le panneau de la sortie du complexe.
+// Le hameau de chalets sur la colline derrière la ville, et les barques en bois (qui flottent sur le lac).
 import * as THREE from 'three';
-import { scene, creerObjet, ajouterDecor, fusionnerDecor } from './monde.js';
-import { hauteur, VILLAGE, NIVEAU_LAC, LAC, aleatoire } from './terrain.js';
-import { textureEnseigne } from './materiaux.js';
+import { creerObjet, ajouterDecor } from './monde.js';
+import { hauteur, HAMEAU, NIVEAU_LAC } from './terrain.js';
 import { ressources } from './ressources.js';
-import { materiauxCarte, objetModele } from './carte.js';
+import { materiauxCarte } from './carte.js';
 
 const B = (taille, materiau, extra = {}) => ({ type: 'boite', taille, materiau, ...extra });
-const C = (rayon, hauteur, materiau, extra = {}) => ({ type: 'cylindre', rayon, hauteur, materiau, ...extra });
 let M;
 
-export function construireVillage() {
+function preparerMateriaux() {
+  if (M) return M;
   const P = ressources.materiaux;
   const base = materiauxCarte();
   const teinter = (m, c) => { if (!m) return null; const n = m.clone(); n.color.set(c); n.userData = { ...m.userData }; return n; };
@@ -26,32 +25,13 @@ export function construireVillage() {
     feuilles: base.couleur(0x3f7a2e, 0.9),
     pignon: (P.planches ?? base.bois).clone(),
   };
-
-  // Chalets disposés en arc, façade tournée vers le lac
-  positionsChalets().forEach(({ x, z, rot, l, p }, i) => chalet(x, z, rot, { l, p, volets: M.volets[i % 3] }));
-  // Fontaine de village et bancs
-  const yv = hauteur(VILLAGE.x, VILLAGE.z);
-  creerObjet({ pos: [VILLAGE.x, yv, VILLAGE.z], son: 'pierre', formes: [
-    C(1.4, 0.7, M.pierre, { pos: [0, 0.35, 0] }), C(0.18, 1.6, M.pierre, { pos: [0, 0.8, 0] }), C(0.4, 0.12, M.pierre, { pos: [0, 1.6, 0] }),
-  ] });
-  ajouterDecor(new THREE.CylinderGeometry(1.25, 1.25, 0.02, 24), base.eau, [VILLAGE.x, yv + 0.62, VILLAGE.z]);
-  for (const [dx, dz, r] of [[4, 0, -Math.PI / 2], [-4, 0, Math.PI / 2], [0, 4, Math.PI]]) {
-    objetModele('painted_wooden_bench', [VILLAGE.x + dx, hauteur(VILLAGE.x + dx, VILLAGE.z + dz), VILLAGE.z + dz], { rot: [0, r, 0], hauteur: 0.85 });
-  }
-
-  ponton();
-  panneauSortie();
-  fusionnerDecor();   // assemble les chalets, la fontaine et le ponton (sinon ils resteraient invisibles)
+  return M;
 }
 
-// Emplacement des chalets (aussi utilisé pour ne pas faire pousser d'herbe dedans)
-export function positionsChalets() {
-  return Array.from({ length: 8 }, (_, i) => {
-    const a = -1.0 + i * 0.32;
-    const x = VILLAGE.x + Math.cos(a) * (40 + (i % 2) * 22), z = VILLAGE.z + Math.sin(a) * (40 + (i % 2) * 22);
-    const vers = new THREE.Vector2(LAC.cx - x, LAC.cz - z).normalize();
-    return { x, z, rot: Math.atan2(vers.x, vers.y) + (aleatoire(i) - 0.5) * 0.3, l: 8 + aleatoire(i + 3) * 3, p: 7 + aleatoire(i + 5) * 2 };
-  });
+// Chalets du hameau, façade tournée vers le lac
+export function construireHameau() {
+  preparerMateriaux();
+  HAMEAU.forEach(({ x, z, rot, l, p }, i) => chalet(x, z, rot, { l, p, volets: M.volets[i % 3] }));
 }
 
 // Coque de barque en bois : effilée à la proue, tableau arrière, fond qui remonte aux extrémités
@@ -142,22 +122,12 @@ function chalet(x, z, rotY, { l = 9, p = 7.5, volets }) {
   }
 }
 
-// Ponton en bois qui avance dans le lac, avec une barque qui flotte
-function ponton() {
-  const x = 40, z0 = -208, z1 = -262, y = NIVEAU_LAC + 0.7;
-  const long = z0 - z1;
-  creerObjet({ pos: [x, y, (z0 + z1) / 2], son: 'bois', formes: [B([2.6, 0.14, long], M.planches)] });
-  // Rampe d'accès depuis la rive
-  const yRive = hauteur(x, z0 + 4);
-  const dy = y + 0.07 - yRive, a = Math.atan2(dy, 4);
-  creerObjet({ pos: [x, (y + 0.07 + yRive) / 2 - 0.07, z0 + 2], rot: [a, 0, 0], son: 'bois', formes: [B([2.6, 0.14, Math.hypot(4, dy)], M.planches)] });
-  for (let zz = z0 - 1; zz > z1; zz -= 3.2) {
-    for (const s of [1, -1]) ajouterDecor(new THREE.CylinderGeometry(0.11, 0.11, 6, 8), M.boisSombre, [x + s * 1.2, y - 3, zz]);
-  }
-  for (const s of [1, -1]) creerObjet({ pos: [x + s * 1.2, y + 0.45, z1 + 0.3], formes: [C(0.12, 0.9, M.boisSombre)] });
-  // Barque (coque creuse) : elle flotte grâce à l'eau qu'elle déplace
-  // (formes de collision invisibles : la vraie coque est un modèle courbe posé par-dessus)
-  const barque = creerObjet({ pos: [x + 2.6, NIVEAU_LAC + 0.25, z1 + 6], masse: 70, son: 'bois', nom: 'barque', amortissement: 0.3, formes: [
+
+// Barque en bois (coque creuse) : elle flotte grâce à l'eau qu'elle déplace.
+// Les formes de collision sont invisibles : la vraie coque est un modèle courbe posé par-dessus.
+export function creerBarque(x, z, rotY = 0) {
+  preparerMateriaux();
+  const barque = creerObjet({ pos: [x, NIVEAU_LAC + 0.25, z], rot: [0, rotY, 0], masse: 70, son: 'bois', nom: 'barque', amortissement: 0.3, formes: [
     B([1.0, 0.06, 3.2], M.boisSombre, { pos: [0, -0.2, 0], cache: true }),
     B([0.06, 0.4, 3.0], M.planches, { pos: [0.6, 0.02, -0.1], cache: true }), B([0.06, 0.4, 3.0], M.planches, { pos: [-0.6, 0.02, -0.1], cache: true }),
     B([0.5, 0.4, 0.06], M.planches, { pos: [0, 0.02, 1.7], cache: true }), B([1.0, 0.4, 0.06], M.planches, { pos: [0, 0.02, -1.75], cache: true }),
@@ -165,7 +135,7 @@ function ponton() {
   const coque = new THREE.Mesh(coqueBarque(3.6, 1.3, 0.5), (() => { const m = M.planches.clone(); m.side = THREE.DoubleSide; return m; })());
   coque.castShadow = coque.receiveShadow = true;
   const details = [
-    // Plat-bord, bancs, tableau arrière et deux rames posées dans la barque
+    // Bancs, tableau arrière et deux rames posées dans la barque
     [new THREE.BoxGeometry(1.16, 0.05, 0.28), M.boisSombre, [0, 0.0, 0.35], [0, 0, 0]],
     [new THREE.BoxGeometry(0.96, 0.05, 0.3), M.boisSombre, [0, 0.0, -1.05], [0, 0, 0]],
     [new THREE.BoxGeometry(0.82, 0.42, 0.05), M.boisSombre, [0, 0.0, -1.79], [0, 0, 0]],
@@ -174,22 +144,13 @@ function ponton() {
     [new THREE.CylinderGeometry(0.025, 0.025, 2.3, 8), M.boisSombre, [-0.32, 0.08, 0.1], [Math.PI / 2, 0, -0.06]],
     [new THREE.BoxGeometry(0.16, 0.015, 0.5), M.planches, [-0.38, 0.08, -1.0], [0, -0.06, 0]],
   ].map(([g, m, p, r]) => { const o = new THREE.Mesh(g, m); o.position.set(...p); o.rotation.set(...r); o.castShadow = true; return o; });
+  // Plat-bord
   const bord = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(
     [[-0.41, -1.8], [-0.62, -0.9], [-0.66, 0.2], [-0.46, 1.2], [0, 1.82], [0.46, 1.2], [0.66, 0.2], [0.62, -0.9], [0.41, -1.8]]
       .map(([bx, bz]) => new THREE.Vector3(bx, 0.26 + 0.1 * Math.pow(Math.max(0, bz / 1.8), 2), bz))), 40, 0.03, 6), M.boisSombre);
   barque.groupe.add(coque, bord, ...details);
   barque.volume = 1.6;
   barque.demiHauteur = 0.15;   // du centre de gravité (bas) au fond de la coque : elle s'enfonce de quelques centimètres
-  barque.tailleMax = 99;   // trop grande pour l'inventaire
-}
-
-function panneauSortie() {
-  const x = 15, z = -31;
-  creerObjet({ pos: [x, 0, z], formes: [C(0.06, 2.4, M.boisSombre, { pos: [0, 1.2, 0] })] });
-  for (const [texte, y, rot] of [['LAC  ▲  200 m', 2.1, 0], ['VILLAGE  ▶  450 m', 1.65, -0.5]]) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.35), new THREE.MeshStandardMaterial({ map: textureEnseigne(texte, '#5a3a24', '#f4e7cf'), side: THREE.DoubleSide }));
-    m.position.set(x, y, z - 0.08);
-    m.rotation.y = rot;
-    scene.add(m);
-  }
+  barque.tailleMax = 99;       // trop grande pour l'inventaire
+  return barque;
 }

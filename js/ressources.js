@@ -13,15 +13,16 @@ const THREE_EXEMPLES = 'https://raw.githubusercontent.com/mrdoob/three.js/r170/e
 // Matériaux photo : id Poly Haven, taille réelle d'un motif (m), cartes à charger
 export const MATERIAUX_PH = {
   herbe: { id: 'leafy_grass', tuile: 2.5 },
-  pave: { id: 'herringbone_pavement', tuile: 2 },
-  beton: { id: 'concrete_floor_worn_001', tuile: 3 },
-  brique: { id: 'brick_wall_02', tuile: 2.5 },
-  platre: { id: 'plastered_wall_04', tuile: 2.5, cartes: ['diff', 'nor_gl'] },
-  marbre: { id: 'marble_01', tuile: 2 },
-  parquet: { id: 'laminate_floor_02', tuile: 2 },
-  plafond: { id: 'ceiling_interior', tuile: 2, cartes: ['diff'] },
   planches: { id: 'brown_planks_05', tuile: 2, cartes: ['diff', 'nor_gl'] },
-  betonMur: { id: 'concrete_wall_004', tuile: 3, cartes: ['diff', 'nor_gl'] },
+  // La ville : façades en plâtre peint, pavés, dalles du quai, mur du quai, tuiles et ardoises, planches du port
+  facade: { id: 'painted_plaster_wall', tuile: 3 },
+  pavage: { id: 'cobblestone_floor_01', tuile: 2.4 },
+  place: { id: 'cobblestone_large_01', tuile: 3.2 },
+  dalles: { id: 'stone_pavers', tuile: 3 },
+  quai: { id: 'old_stone_wall', tuile: 3 },
+  tuiles: { id: 'roof_tiles', tuile: 2.5 },
+  ardoises: { id: 'grey_roof_tiles_02', tuile: 2.5, cartes: ['diff', 'nor_gl'] },
+  bois2: { id: 'weathered_planks', tuile: 2 },
   // Vallée suisse : les sols du relief
   solVert: { id: 'forrest_ground_01', tuile: 3, cartes: ['diff', 'nor_gl'] },
   foret: { id: 'forest_ground_04', tuile: 2.5, cartes: ['diff', 'nor_gl'] },
@@ -44,11 +45,13 @@ export const NATURE_PH = [
 
 // Modèles 3D Poly Haven utilisés dans la carte
 export const MODELES_PH = [
-  'wooden_crate_02', 'Barrel_01', 'old_tyre', 'plastic_crate_02', 'cardboard_box_01',
-  'sledgehammer_01', 'wooden_hammer_01', 'baseball_bat', 'football', 'metal_toolbox',
-  'painted_wooden_bench', 'wooden_picnic_table', 'potted_plant_04', 'planter_box_01', 'shrub_03',
-  'metal_office_desk', 'modern_arm_chair_01', 'Sofa_01', 'Television_01', 'television_02', 'vintage_microwave',
-  'metal_trash_can', 'WetFloorSign_01', 'portable_generator', 'street_lamp_02',
+  // Objets qu'on peut prendre
+  'wooden_crate_02', 'Barrel_01', 'old_tyre', 'cardboard_box_01', 'sledgehammer_01', 'wooden_hammer_01', 'baseball_bat', 'football',
+  'modern_arm_chair_01',
+  // Mobilier de la ville et du port
+  'painted_wooden_bench', 'street_lamp_02', 'metal_trash_can', 'planter_box_01', 'planter_pot_clay', 'potted_plant_04', 'shrub_03',
+  'outdoor_table_chair_set_01', 'CoffeeCart_01', 'modular_wooden_pier', 'lifebuoy', 'wine_barrel_01', 'wooden_crate_01',
+  'large_castle_door',
 ];
 
 export const ressources = { modeles: new Map(), nature: new Map(), materiaux: {}, ferrari: null, environnement: null, ciel: null,

@@ -9,9 +9,10 @@ import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
-import { construireTerrain, hauteur, hauteurSol, NIVEAU_LAC, VILLAGE, BELVEDERE } from './terrain.js';
+import { construireTerrain, hauteur, hauteurSol, riveSud, NIVEAU_LAC, HAMEAU, BELVEDERE } from './terrain.js';
 import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, horsReflet } from './eau.js';
-import { construireVillage } from './village.js';
+import { construireHameau } from './village.js';
+import { construireVille } from './ville.js';
 import { Pouvoirs } from './pouvoirs.js';
 import { Interface } from './interface.js';
 import { majEffets } from './effets.js';
@@ -37,7 +38,7 @@ document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
 const HORIZON = 0xc9dcee;
-scene.fog = new THREE.Fog(HORIZON, ULTRA ? 110 : 180, ULTRA ? 3600 : 5200);   // brume : les montagnes lointaines bleuissent
+scene.fog = new THREE.Fog(HORIZON, ULTRA ? 260 : 180, ULTRA ? 6500 : 5200);   // brume légère : les montagnes lointaines bleuissent
 scene.background = new THREE.Color(HORIZON);
 const toileCiel = document.createElement('canvas');
 toileCiel.width = 4; toileCiel.height = 256;
@@ -71,7 +72,7 @@ const lampeHall = new THREE.PointLight(0xffe8c8, 38, 18, 1.5);
 lampeHall.position.set(0, 4.1, 16);
 const lampeEntrepot = new THREE.PointLight(0xfff0d8, 40, 24, 1.6);
 lampeEntrepot.position.set(-23, 6.4, 0);
-scene.add(lampeHall, lampeEntrepot);
+// (lampes d'intérieur de l'ancien hall : plus utilisées)
 const soleil = new THREE.DirectionalLight(0xfff3e0, 2.8);
 soleil.castShadow = true;
 const OMBRE = PROFIL.ombre;
@@ -119,8 +120,9 @@ await new Promise((ok) => setTimeout(ok, 30));
 construireForet(renderer);
 construireHerbe();
 await construireSousBois().catch((e) => console.warn('Sous-bois indisponible', e));
-const carte = construireCarte();
-construireVillage();
+construireCarte();
+construireHameau();
+const carte = construireVille();   // la ville au bord du lac (et le point de départ, sur la place)
 const joueur = new Joueur(rig, camera, carte.depart);
 const mains = { left: new MainPhysique('left'), right: new MainPhysique('right') };
 const listeMains = Object.values(mains);
@@ -184,7 +186,7 @@ crochets.ranger = (main, objet) => inventaire.ranger(main, objet);
 
 let personnages = [];
 creerPersonnages(carte.personnages)
-  .then((p) => { personnages = p; message('Les habitants du complexe sont arrivés'); })
+  .then((p) => { personnages = p; message('Les habitants de la ville sont arrivés'); })
   .catch((err) => { console.error(err); message('Personnages indisponibles (connexion ?)'); });
 
 // --- Super-pouvoirs et panneau d'interface (inventaire, pouvoirs, options) ---
@@ -201,17 +203,17 @@ const interfaceVR = new Interface({ joueur, camera, rig, mains, inventaire, pouv
 // Destinations de téléportation (le sommet est le plus haut pic de la zone détaillée de la vallée)
 const sommet = { x: 0, y: 0, z: 0 };
 const VOISINS = [[16, 0], [-16, 0], [0, 16], [0, -16], [12, 12], [-12, 12], [12, -12], [-12, -12]];
-for (let x = -740; x <= 740; x += 8) for (let z = -940; z <= 540; z += 8) {
+for (let x = -950; x <= 950; x += 8) for (let z = -1430; z <= 520; z += 8) {
   const y = hauteur(x, z);
   if (y > sommet.y && VOISINS.every(([dx, dz]) => hauteur(x + dx, z + dz) <= y)) Object.assign(sommet, { x, y, z });
 }
 const DESTINATIONS = {
-  hall: { nom: 'Hall du complexe', pos: () => [carte.depart.x, 0, carte.depart.z] },
-  ponton: { nom: 'Ponton du lac', pos: () => [40, NIVEAU_LAC + 0.78, -240] },
-  village: { nom: 'Village', pos: () => [VILLAGE.x, hauteur(VILLAGE.x, VILLAGE.z - 6), VILLAGE.z - 6] },
+  place: { nom: 'Place du village', pos: () => [carte.depart.x, 0, carte.depart.z], regard: [0, -200] },
+  port: { nom: 'Port', pos: () => [200, NIVEAU_LAC + 0.83, riveSud(200) - 20], regard: [100, -900] },
+  hameau: { nom: 'Chalets', pos: () => [HAMEAU[3].x, hauteurSol(HAMEAU[3].x, HAMEAU[3].z - 11), HAMEAU[3].z - 11], regard: [0, -560] },
   sommet: { nom: `Sommet (${Math.round(sommet.y)} m)`, pos: () => [sommet.x, sommet.y + 0.3, sommet.z] },
   // Le belvédère : la vue sur le lac et le cirque de falaises
-  belvedere: { nom: 'Belvédère du lac', pos: () => [BELVEDERE.x + 22, hauteurSol(BELVEDERE.x + 22, BELVEDERE.z - 16) + 0.1, BELVEDERE.z - 16], regard: [20, -540] },
+  belvedere: { nom: 'Belvédère du lac', pos: () => [BELVEDERE.x - 17, hauteurSol(BELVEDERE.x - 17, BELVEDERE.z - 19) + 0.1, BELVEDERE.z - 19], regard: [-150, -1050] },
 };
 function teleporter(id) {
   for (const m of listeMains) m.lacher();
@@ -440,7 +442,7 @@ function majSousEau(t) {
   }
 }
 
-renderer.xr.addEventListener('sessionstart', () => { tangage = 0; document.exitPointerLock?.(); message('Bienvenue ! Y : inventaire   X : super-pouvoirs', 5); });
+renderer.xr.addEventListener('sessionstart', () => { tangage = 0; document.exitPointerLock?.(); message('Bienvenue au bord du lac ! Y : inventaire   X : pouvoirs', 5); });
 renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.65, 0); camera.quaternion.identity(); });
 let renduEcran = null;   // rendu "cinéma" de l'écran du PC (créé à la fin du chargement)
 addEventListener('resize', () => {
@@ -474,7 +476,7 @@ function boucle(dtImpose) {
     rotationFluide = !rotationFluide;
     message(rotationFluide ? 'Rotation fluide' : 'Rotation par crans');
   }
-  if (e.retour && !avant.retour) teleporter('hall');
+  if (e.retour && !avant.retour) teleporter('place');
   if (e.reset && !avant.reset) toutReplacer();
   for (const [cle, onglet] of [['ouvrirInventaire', 'inventaire'], ['ouvrirPouvoirs', 'pouvoirs'], ['ouvrirOptions', 'options']]) {
     if (e[cle] && !avant[cle]) { interfaceVR.basculer(onglet); if (interfaceVR.ouvert) pouvoirs.lacherTout(); }

@@ -317,9 +317,9 @@ function placerArbres(nombre) {
 function placerArbresLointains(nombre) {
   const arbres = [];
   for (let essai = 1; arbres.length < nombre && essai < nombre * 12; essai++) {
-    const a = aleatoire(essai + 300000) * Math.PI * 2, r = 820 + Math.sqrt(aleatoire(essai + 400000)) * 1500;
+    const a = aleatoire(essai + 300000) * Math.PI * 2, r = INTERIEUR.taille / 2 + 20 + Math.sqrt(aleatoire(essai + 400000)) * 1500;
     const x = INTERIEUR.x + Math.cos(a) * r, z = INTERIEUR.z + Math.sin(a) * r;
-    if (Math.abs(x - INTERIEUR.x) < 800 && Math.abs(z - INTERIEUR.z) < 800) continue;
+    if (Math.abs(x - INTERIEUR.x) < INTERIEUR.taille / 2 && Math.abs(z - INTERIEUR.z) < INTERIEUR.taille / 2) continue;
     const yAnalytique = hauteur(x, z);
     if (yAnalytique > 340 || densiteForet(x, z, yAnalytique) < 0.3 + aleatoire(essai) * 0.5) continue;
     arbres.push({ x, y: hauteurSol(x, z), z, v: Math.floor(aleatoire(essai + 3) * 4), s: 0.9 + aleatoire(essai + 5) * 0.4, rot: aleatoire(essai + 9) * 6.283 });

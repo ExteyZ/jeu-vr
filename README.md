@@ -1,12 +1,13 @@
-# Complexe Delta VR
+# Lac Delta VR
 
 Un jeu de physique en réalité virtuelle (WebXR) pour Meta Quest, qui marche directement dans le navigateur du casque.
 Adresse : **exteyz.github.io**
 
-- Une vallée suisse immense, inspirée du lac d'Oeschinen : un lac turquoise d'eau de glacier au pied d'un cirque de
-  falaises calcaires en couches (corniches herbeuses, neige en altitude), un belvédère avec vue sur le lac,
-  des forêts de sapins, une barque qui flotte,
-  un ponton et un village de chalets. Le Complexe Delta (hall, cour, entrepôt, bureaux, parcours) est au fond de la vallée.
+- Une ville suisse au bord d'un grand lac turquoise (1,5 km) : quai en pierre et promenade (réverbères, bancs, fleurs),
+  port avec pontons et barques qui flottent, grande place pavée avec fontaine, terrasses de café et église à clocher,
+  rues pavées bordées de maisons colorées de 3 à 5 étages (volets, balcons, boutiques à stores, toits de tuiles ou
+  d'ardoises). Derrière : une colline avec un hameau de chalets. En face : un cirque de falaises calcaires inspiré du lac
+  d'Oeschinen, avec forêts de sapins, et un belvédère avec vue sur tout le lac.
 - Mains physiques à 5 doigts, comme dans Bonelab : chaque doigt suit le capteur de la manette sous lui (index posé ou non
   sur la gâchette, pouce posé ou levé, majeur, annulaire et auriculaire avec la gâchette du majeur), donc on peut pointer,
   faire un pouce levé ou serrer le poing ; les doigts s'écartent main ouverte. Elles se bloquent contre les murs, poussent les objets, sentent leur poids
@@ -65,11 +66,11 @@ et téléportation (hall, ponton, village, belvédère, sommet).
 - `js/catalogue.js` : objets qu'on fait apparaître depuis l'inventaire
 - `js/pouvoirs.js` : super-pouvoirs ; `js/effets.js` : particules, lueurs, rayons
 - `js/profil.js` : choix du mode graphique (Ultra sur PC, Quest dans le casque seul) ; `js/rendu.js` : post-traitement sur l'écran du PC
-- `js/terrain.js` : relief de la vallée et ses sols ; `js/eau.js` : lac, reflets et flottaison ; `js/village.js` : chalets, ponton et barque
+- `js/terrain.js` : relief de la vallée et ses sols ; `js/eau.js` : lac, reflets et flottaison ; `js/village.js` : hameau de chalets et barques
 - `js/arbres.js` : sapins réalistes et leurs imposteurs ; `js/herbe.js` : herbe ; `js/sousbois.js` : plantes, rochers et bois morts
 - `js/personnages.js` : habitants (animations, dialogues, réactions, chute physique)
 - `js/sons.js` : sons d'impact et voix
-- `js/carte.js` : le Complexe Delta et tous ses objets
+- `js/ville.js` : la ville au bord du lac (quai, port, place, église, maisons) ; `js/carte.js` : matériaux et fabriques d'objets
 - `js/materiaux.js` : textures dessinées par le code (objets simples)
 - `js/ressources.js` : chargement du ciel photo, des matériaux et des modèles réalistes
 - `js/main.js` : rendu, contrôles et boucle de jeu

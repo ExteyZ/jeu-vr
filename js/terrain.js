@@ -1,18 +1,23 @@
-// La vallée suisse : relief (prairies, forêts, montagnes enneigées) et lac.
-// Le Complexe Delta est posé à plat au fond de la vallée ; le lac s'étend au nord.
-// Les arbres sont dans arbres.js, l'herbe dans herbe.js, les plantes et rochers dans sousbois.js.
+// La vallée suisse : relief (prairies, forêts, montagnes, cirque de falaises) et grand lac.
+// La ville est posée à plat sur la rive sud du lac ; un hameau de chalets monte sur la colline derrière.
+// Les arbres sont dans arbres.js, l'herbe dans herbe.js, les plantes et rochers dans sousbois.js, la ville dans ville.js.
 import * as THREE from 'three';
 import { RAPIER, world, scene, infos, CG_MONDE } from './monde.js';
 import { PROFIL, ULTRA } from './profil.js';
 
 export const NIVEAU_LAC = -2.5;
-export const LAC = { cx: 0, cz: -430, rx: 380, rz: 210 };
-export const VILLAGE = { x: 445, z: -300 };
-export const BELVEDERE = { x: -335, z: -215, h: 58 };   // colline au bord du lac (sud-ouest)
-const VALLEE = { x: 0, z: -230 };
-export const COMPLEXE = { x0: -40, x1: 38, z0: -34, z1: 30 };
-// Zone détaillée (1,6 km de côté) : relief fin, collisions précises, forêt et végétation
-export const INTERIEUR = { x: 0, z: -200, taille: 1600 };
+export const LAC = { cx: 0, cz: -560, rx: 760, rz: 420 };   // 1,5 km sur 840 m
+// La ville : terrain plat (niveau 0, le quai domine l'eau de 2,5 m), de la rive jusqu'au pied de la colline
+export const VILLE = { x0: -310, x1: 310, z1: -20 };
+export const BELVEDERE = { x: 450, z: -60, h: 55 };   // colline à l'est de la ville, avec vue sur le lac et les falaises
+const VALLEE = { x: 0, z: -330 };
+// Zone détaillée (2 km de côté) : relief fin, collisions précises, forêt et végétation
+export const INTERIEUR = { x: 0, z: -460, taille: 2000 };
+// Rive sud du lac (le quai de la ville) : z de la rive pour une position x
+export const riveSud = (x) => LAC.cz + LAC.rz * Math.sqrt(Math.max(0, 1 - (x / LAC.rx) ** 2));
+// Hameau de chalets sur la colline derrière la ville
+export const HAMEAU = [[-250, 30, 0.2], [-175, 48, -0.1], [-95, 26, 0.05], [95, 34, -0.08], [170, 52, 0.12], [250, 28, -0.2],
+  [-60, 85, 0.3], [60, 92, -0.25], [-210, 110, 0.1], [215, 118, -0.05]].map(([x, z, r], i) => ({ x, z, rot: Math.PI + r, l: 8 + (i % 3), p: 7 + (i % 2) * 1.5 }));
 
 // --- Bruit procédural (valeur lissée + fractales) ---
 function hash2(ix, iz) {
@@ -53,10 +58,9 @@ export function distanceLac(x, z) {
 
 // Hauteur du sol en (x, z)
 export function hauteur(x, z) {
-  // Prairies vallonnées, plus douces dans le couloir entre le complexe et le lac (pour voir le lac en sortant)
-  const couloir = 0.2 + 0.8 * lisse(50, 190, Math.abs(x - 10)) + 0.8 * lisse(-40, 20, z);
-  let h = ((fbm(x / 170, z / 170, 4) - 0.5) * 16 + (fbm(x / 38 + 50, z / 38, 3) - 0.5) * 2.5) * Math.min(1, couloir);
-  h -= 2.2 * lisse(-40, -200, z) * (1 - lisse(120, 260, Math.abs(x)));   // le terrain descend doucement vers le lac
+  // Prairies vallonnées ; au sud de la ville, la campagne monte doucement en collines
+  let h = (fbm(x / 170, z / 170, 4) - 0.5) * 16 + (fbm(x / 38 + 50, z / 38, 3) - 0.5) * 2.5;
+  h += 26 * lisse(-40, 260, z) * (0.6 + 0.4 * fbm(x / 120 + 3, z / 120, 2));
   // Montagnes, de plus en plus hautes en s'éloignant du fond de la vallée
   const r = Math.hypot(x - VALLEE.x, (z - VALLEE.z) / 1.4);
   const m = lisse(430, 1300, r);
@@ -79,8 +83,8 @@ export function hauteur(x, z) {
       const contrefort = crete(angle * 3.6 + 3.3, irreg * 1.2 + 0.7, 3) - 0.45;
       const pied = 1.6 + contrefort * 0.3 + irreg * 0.3;
       const talus = 150 * Math.pow(lisse(1.04, pied, dl), 1.3);   // pente boisée d'éboulis au pied des falaises
-      const falaise = 330 * Math.pow(lisse(pied, pied + 0.55, dl), 0.8) * (0.75 + 0.5 * crete(x / 300 + 2, z / 300 - 1, 3));
-      const cimes = (crete(x / 380 + 1.7, z / 380 + 4.1, 5) * 540 + fbm(x / 90, z / 90, 3) * 80) * lisse(pied + 0.3, pied + 1.7, dl);
+      const falaise = 430 * Math.pow(lisse(pied, pied + 0.5, dl), 0.8) * (0.75 + 0.5 * crete(x / 300 + 2, z / 300 - 1, 3));
+      const cimes = (crete(x / 380 + 1.7, z / 380 + 4.1, 5) * 680 + fbm(x / 90, z / 90, 3) * 90) * lisse(pied + 0.25, pied + 1.4, dl);
       // Couches de calcaire (épaisseur irrégulière) : une falaise, une corniche, une falaise...
       let roc = falaise + cimes;
       const bande = 46 + irreg * 24, decal = irreg * 80 + (fbm(x / 35, z / 35, 2) - 0.5) * 22, t = (roc + decal) / bande, k = Math.floor(t);
@@ -93,17 +97,22 @@ export function hauteur(x, z) {
   // Belvédère : une colline boisée au bord du lac, d'où l'on voit tout le lac et le cirque de falaises
   const db = Math.hypot(x - BELVEDERE.x, z - BELVEDERE.z);
   if (db < 170) h = Math.max(h, NIVEAU_LAC + BELVEDERE.h * Math.pow(lisse(170, 0, db), 1.7) + (fbm(x / 30, z / 30, 2) - 0.5) * 4 * lisse(170, 60, db));
-  // Le complexe est construit sur un terrain parfaitement plat
-  const dx = Math.max(COMPLEXE.x0 - x, 0, x - COMPLEXE.x1), dz = Math.max(COMPLEXE.z0 - z, 0, z - COMPLEXE.z1);
-  const w = 1 - lisse(0, 35, Math.hypot(dx, dz));
-  h = h * (1 - w);
-  // Le village est sur un replat
-  const dv = Math.hypot(x - VILLAGE.x, z - VILLAGE.z);
-  const wv = 1 - lisse(70, 140, dv);
-  if (wv > 0) h = h * (1 - wv) + Math.max(NIVEAU_LAC + 3, hauteurBrute(VILLAGE.x, VILLAGE.z)) * wv;
+  // La ville est bâtie sur un terrain plat au niveau 0 (le quai domine le lac de 2,5 m)
+  if (dl >= 1) {
+    const dx = Math.max(VILLE.x0 - x, 0, x - VILLE.x1), dz = Math.max(0, z - VILLE.z1);
+    const w = 1 - lisse(0, 50, Math.hypot(dx, dz));
+    h = h * (1 - w);
+  }
+  // Chaque chalet du hameau est posé sur un petit replat
+  for (const c of HAMEAU) {
+    const d = Math.hypot(x - c.x, z - c.z);
+    if (d < 16) { const w = 1 - lisse(7, 16, d); h = h * (1 - w) + hauteurCampagne(c.x, c.z) * w; }
+  }
   return h;
 }
-function hauteurBrute(x, z) { return (fbm(x / 170, z / 170, 4) - 0.5) * 16; }
+function hauteurCampagne(x, z) {
+  return (fbm(x / 170, z / 170, 4) - 0.5) * 16 + (fbm(x / 38 + 50, z / 38, 3) - 0.5) * 2.5 + 26 * lisse(-40, 260, z) * (0.6 + 0.4 * fbm(x / 120 + 3, z / 120, 2));
+}
 
 export function pente(x, z) {
   const e = 2;
@@ -112,12 +121,11 @@ export function pente(x, z) {
   return 1 - n.y;
 }
 
-// Endroits où l'on ne met ni arbres ni végétation haute (bâtiments, lac, village, chemin du ponton)
+// Endroits où l'on ne met ni arbres ni végétation haute (ville, lac, chalets)
 export function zoneLibre(x, z, marge = 25) {
-  if (x > COMPLEXE.x0 - marge && x < COMPLEXE.x1 + marge && z > COMPLEXE.z0 - marge && z < COMPLEXE.z1 + marge) return false;
+  if (x > VILLE.x0 - marge && x < VILLE.x1 + marge && z < VILLE.z1 + marge && z > riveSud(x) - 10) return false;
   if (distanceLac(x, z) < 1.08) return false;
-  if (Math.hypot(x - VILLAGE.x, z - VILLAGE.z) < 120) return false;
-  if (Math.abs(x - 40) < 12 && z < -150 && z > -260) return false;   // chemin du ponton
+  for (const c of HAMEAU) if (Math.hypot(x - c.x, z - c.z) < 12 + marge * 0.2) return false;
   return true;
 }
 
@@ -128,7 +136,7 @@ export function densiteForet(x, z, y = hauteur(x, z)) {
   const dl = distanceLac(x, z), nord = lisse(LAC.cz + 60, LAC.cz - 200, z);
   f += 0.3 * lisse(1.9, 1.12, dl) * (1 - lisse(LAC.cz + 40, LAC.cz + 150, z));
   // Sur les falaises du cirque : seulement de l'herbe sur les corniches, pas de forêt
-  const sommetBelvedere = 1 - lisse(28, 65, Math.hypot(x - BELVEDERE.x, z - BELVEDERE.z));   // vue dégagée en haut du belvédère
+  const sommetBelvedere = 1 - lisse(85, 130, Math.hypot(x - BELVEDERE.x, z - BELVEDERE.z));   // vue dégagée sur le belvédère
   return lisse(0.44, 0.58, f) * (1 - lisse(300, 380, y)) * (1 - nord * lisse(60, 140, y)) * (1 - sommetBelvedere);
 }
 
@@ -259,7 +267,10 @@ vec3 roche = texture2D(c_roche, vMonde.zy / 9.0).rgb * poidsAxes.x + echant(c_ro
 float loin = smoothstep(120.0, 700.0, dist);
 #if ULTRA
 vec3 rocheLoin = texture2D(c_roche, vMonde.zy / 310.0).rgb * poidsAxes.x + texture2D(c_roche, vMonde.xz / 310.0).rgb * poidsAxes.y + texture2D(c_roche, vMonde.xy / 310.0).rgb * poidsAxes.z;
-roche = mix(roche, mix(vec3(0.3, 0.3, 0.29), rocheLoin * 0.8, 0.45), loin);
+roche = mix(roche, mix(vec3(0.27, 0.27, 0.26), rocheLoin * 0.72, 0.45), loin);
+// Grandes parois vues de loin : la roche à moyenne échelle dessine des taches, coulures et couches irrégulières
+vec3 rocheMoy = texture2D(c_roche, vMonde.zy / 48.0).rgb * poidsAxes.x + texture2D(c_roche, vMonde.xz / 48.0).rgb * poidsAxes.y + texture2D(c_roche, vMonde.xy / 48.0).rgb * poidsAxes.z;
+roche *= mix(1.0, 0.35 + 1.5 * dot(rocheMoy, vec3(0.333)), loin * smoothstep(0.4, 0.7, 1.0 - nG.y));
 #else
 roche = mix(roche, vec3(0.32, 0.31, 0.3), loin * 0.85);
 #endif
@@ -276,8 +287,8 @@ float wMousse = smoothstep(0.16, 0.3, penteSol + (variation - 0.5) * 0.08);
 // En bas des montagnes, seules les vraies falaises sont en roche nue : le reste est vert (comme dans les Alpes)
 float altitudeRoche = smoothstep(70.0, 260.0, vMonde.y);
 float wRoche = smoothstep(mix(0.5, 0.33, altitudeRoche), mix(0.68, 0.5, altitudeRoche), penteSol + (variation - 0.5) * 0.06);
-float hauteurNeige = 470.0 + variation * 240.0;
-float wNeige = smoothstep(hauteurNeige, hauteurNeige + 60.0, vMonde.y) * (1.0 - smoothstep(0.36, 0.6, penteSol));
+float hauteurNeige = 560.0 + variation * 240.0;
+float wNeige = smoothstep(hauteurNeige, hauteurNeige + 60.0, vMonde.y) * (1.0 - smoothstep(0.18, 0.34, penteSol));   // la neige ne tient pas sur les parois raides
 float wGalets = 1.0 - smoothstep(niveauLac + 0.3, niveauLac + 0.75, vMonde.y + (variation - 0.5) * 0.3);
 // Vus de loin : les prairies sont plus sombres et les forêts forment des masses vert foncé (la cime des sapins)
 prairie *= mix(vec3(1.0), vec3(0.6, 0.74, 0.56), loin);
