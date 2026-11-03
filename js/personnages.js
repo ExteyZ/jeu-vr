@@ -11,8 +11,9 @@ import { RAPIER, world, scene, infos, groupes, G_PNJ, G_MONDE, G_JOUEUR, CG_PNJ,
 import { corpsTenus } from './mains.js';
 import { parler } from './sons.js';
 
-const DOSSIER = 'assets/personnages/';
-const BASE_THREE = 'https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/models/gltf/';
+const DOSSIER = 'assets/personnages/';   // textures réduites (1024 px) dans ce dépôt
+const ROCKETBOX = 'https://raw.githubusercontent.com/microsoft/Microsoft-Rocketbox/master/Assets/';
+const BASE_THREE ='https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/models/gltf/';
 
 const REPLIQUES = {
   salut: ['Salut !', 'Bonjour !', 'Tiens, un nouveau visage !', 'Hé, bienvenue au complexe !', 'Coucou, ça va ?'],
@@ -100,18 +101,20 @@ async function chargerRocketbox(definitions) {
   await Promise.all(genres.map(async (g) => {
     anims[g] = {};
     await Promise.all(Object.entries(ANIMS_ROCKETBOX[g]).map(async ([nom, fichier]) => {
-      const a = await fbx.loadAsync(`${DOSSIER}animations/${fichier}.fbx`);
+      const dossier = fichier.includes('walk') ? 'xy' : 'static';   // la marche sans déplacement intégré
+      const a = await fbx.loadAsync(`${ROCKETBOX}Animations/all_animations_max_motextr_${dossier}/${fichier}.max.fbx`);
       anims[g][nom] = a.animations[0];
     }));
   }));
   const modeles = await Promise.all(definitions.map(async (d) => {
     const dossier = `${DOSSIER}${d.rocketbox}/`;
-    const [objet, cc, cn, tc, tn, oc, oa] = await Promise.all([
-      fbx.loadAsync(`${dossier}${d.rocketbox}.fbx`),
-      tex(dossier + 'corps_couleur.jpg', true), tex(dossier + 'corps_normal.jpg'),
-      tex(dossier + 'tete_couleur.jpg', true), tex(dossier + 'tete_normal.jpg'),
+    const [objet, cc, tc, oc, oa] = await Promise.all([
+      fbx.loadAsync(`${ROCKETBOX}Avatars/Adults/${d.rocketbox}/Export/${d.rocketbox}.fbx`),
+      tex(dossier + 'corps_couleur.jpg', true), tex(dossier + 'tete_couleur.jpg', true),
       tex(dossier + 'opacite_couleur.jpg', true), tex(dossier + 'opacite_alpha.jpg'),
     ]);
+    if (!cc || !tc) throw new Error('Textures manquantes pour ' + d.rocketbox);
+    const cn = null, tn = null;
     objet.traverse((o) => {
       if (!o.isMesh) return;
       const liste = Array.isArray(o.material) ? o.material : [o.material];

@@ -45,5 +45,5 @@ Adresse : **exteyz.github.io**
 - Ciel photo, matériaux et objets 3D : [Poly Haven](https://polyhaven.com) (CC0)
 - Mains : modèle « generic-hand » de [WebXR Input Profiles](https://github.com/immersive-web/webxr-input-profiles) (MIT)
 - Voiture : modèle Ferrari des exemples three.js
-- Personnages : [Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) (MIT), préparés par
-  le workflow `.github/workflows/personnages.yml` (textures réduites en 1024 px dans `assets/personnages`)
+- Personnages : [Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) (MIT) ; modèles et animations chargés
+  depuis le dépôt Microsoft, textures réduites en 1024 px dans `assets/personnages`
