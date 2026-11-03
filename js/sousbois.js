@@ -27,6 +27,8 @@ const ESPECES = [
   { id: 'dandelion_01', milieu: 'prairie', densite: 0.03, echelle: [0.9, 1.4], portee: 35, triangles: 4000 },
   { id: 'rock_07', milieu: 'partout', densite: 0.0012, echelle: [0.6, 2.2], portee: 130, triangles: 4000, enfonce: 0.25, pente: true, solide: 'enveloppe' },
   { id: 'rock_09', milieu: 'partout', densite: 0.0012, echelle: [0.6, 2.2], portee: 130, triangles: 4000, enfonce: 0.25, pente: true, solide: 'enveloppe' },
+  { id: 'rock_07', milieu: 'rive', densite: 0.03, echelle: [0.2, 0.9], portee: 110, triangles: 2000, enfonce: 0.35, pente: true },
+  { id: 'rock_moss_set_02', milieu: 'rive', densite: 0.008, echelle: [0.5, 1.2], portee: 110, triangles: 4000, enfonce: 0.2, pente: true },
   { id: 'boulder_01', milieu: 'rocheux', densite: 0.0008, echelle: [0.5, 1.6], portee: 170, triangles: 3000, enfonce: 0.2, pente: true, solide: 'enveloppe' },
   { id: 'rock_face_01', milieu: 'falaise', densite: 0.0014, echelle: [0.8, 2.5], portee: 200, triangles: 3000, enfonce: 0.3, pente: true, solide: 'enveloppe' },
   { id: 'rock_face_02', milieu: 'falaise', densite: 0.0014, echelle: [0.8, 2.5], portee: 200, triangles: 3000, enfonce: 0.3, pente: true, solide: 'enveloppe' },
@@ -36,6 +38,8 @@ const HAUT = new THREE.Vector3(0, 1, 0);
 
 // Convient-il à l'espèce ? (0 à 1)
 function convenance(milieu, x, z, y, penteSol, foret) {
+  // Rive du lac : galets et rochers à moitié dans l'eau
+  if (milieu === 'rive') { const dl = distanceLac(x, z); return lisse(0.97, 1.01, dl) * (1 - lisse(1.05, 1.14, dl)) * (Math.abs(x - 40) < 6 && z > -265 ? 0 : 1); }
   if (y < NIVEAU_LAC + 0.7 || distanceLac(x, z) < 1.02) return 0;
   const montagne = 1 - lisse(330, 430, y);
   switch (milieu) {
@@ -112,7 +116,7 @@ export async function construireSousBois() {
       const graine = e * 1000003 + i;
       const x = INTERIEUR.x - INTERIEUR.taille / 2 + aleatoire(graine) * INTERIEUR.taille;
       const z = INTERIEUR.z - INTERIEUR.taille / 2 + aleatoire(graine + 77777) * INTERIEUR.taille;
-      if (!zoneLibre(x, z, espece.milieu === 'prairie' ? 3 : 8)) continue;
+      if (espece.milieu !== 'rive' && !zoneLibre(x, z, espece.milieu === 'prairie' ? 3 : 8)) continue;
       const y = hauteurSol(x, z);
       const e2 = 1.5, dx = hauteurSol(x + e2, z) - hauteurSol(x - e2, z), dz = hauteurSol(x, z + e2) - hauteurSol(x, z - e2);
       n.set(-dx, 2 * e2, -dz).normalize();

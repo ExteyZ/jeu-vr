@@ -10,7 +10,7 @@ export const PROFIL = ULTRA ? {
   textures: '2k',               // résolution des matériaux photo
   ciel: '4k',                   // résolution du ciel photo
   segmentsRelief: 512,          // zone détaillée de 1,6 km : un point tous les 3,1 m
-  ombre: { taille: 4096, portee: 45 },
+  ombre: { taille: 4096, portee: 70 },
   herbe: { touffes: 50000, rayon: 30 },
   arbres: { nombre: 12000, portee3D: 62, impostor: 1024 },
   sousBois: { rayon: 90, densite: 1 },

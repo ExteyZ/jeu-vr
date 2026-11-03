@@ -108,8 +108,10 @@ export class MainPhysique {
     this.corps.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
 
-  majEntrees({ serrage = 0, gachette = 0, pouce = 0 }) {
-    this.serrage = serrage; this.gachette = gachette; this.pouce = pouce;
+  // serrage / gachette : 0 à 1 ; pouce : 0 = levé, ~0,5 = posé sur la manette, ~0,85 = appuie sur un bouton ;
+  // indexPose : l'index touche la gâchette (capteur tactile des manettes Quest)
+  majEntrees({ serrage = 0, gachette = 0, pouce = 0, indexPose = true }) {
+    this.serrage = serrage; this.gachette = gachette; this.pouce = pouce; this.indexPose = indexPose;
     if (!this.serre && serrage > 0.55) { this.serre = true; this.attraper(); }
     else if (this.serre && serrage < 0.35) { this.serre = false; this.lacher(); this.visee = null; this.attire = null; }
     if (!this.appuie && gachette > 0.6) { this.appuie = true; this.objetTenu?.utiliser?.(this.objetTenu, this); }
@@ -330,14 +332,30 @@ export class MainPhysique {
     this.fantome.groupe.quaternion.copy(this.cible.quat);
     this.fantome.groupe.visible = this.fantome.groupe.position.distanceTo(g.position) > 0.04;
 
-    let pose;
-    if (this.courbures) pose = this.courbures;
-    else {
-      const s = this.serrage;
-      pose = [Math.max(s * 0.6, this.pouce * 0.45), Math.max(s * 0.85, this.gachette), s, s, s];
+    // Doigts comme dans Bonelab : chacun suit le capteur de la manette sous lui
+    let cible;
+    if (this.courbures) {
+      cible = [...this.courbures];
+      // Objet à poignée (lampe, lance-balles) : l'index reste libre et suit la gâchette
+      if (this.objetTenu?.poignee) cible[1] = this.indexPose ? 0.32 + 0.6 * this.gachette : 0.08;
+    } else {
+      const s = this.serrage, repos = 0.14;                      // main détendue : doigts légèrement pliés
+      cible = [
+        Math.max(0.04, this.pouce),                                // pouce : levé, posé, ou qui appuie
+        this.indexPose ? 0.3 + 0.7 * this.gachette : 0.04 + 0.08 * s,   // index : tendu (pointer), posé, ou plié
+        repos + (1 - repos) * s,                                   // majeur, annulaire, auriculaire : gâchette du majeur,
+        repos + 0.02 + (1 - repos) * Math.min(1, s * 1.06),        // l'auriculaire se ferme un peu avant les autres
+        repos + 0.05 + (1 - repos) * Math.min(1, s * 1.12),
+      ];
     }
-    this.visuel.poser(pose);
-    if (this.fantome.groupe.visible) this.fantome.poser(pose);
+    // Mouvement fluide (les doigts ne sautent pas d'une position à l'autre)
+    const maintenant = performance.now(), dt = Math.min(0.1, (maintenant - (this.tempsDoigts ?? maintenant)) / 1000);
+    this.tempsDoigts = maintenant;
+    this.doigts ??= [...cible];
+    const k = 1 - Math.exp(-dt * (this.courbures ? 30 : 18));
+    for (let d = 0; d < 5; d++) this.doigts[d] += (cible[d] - this.doigts[d]) * k;
+    this.visuel.poser(this.doigts);
+    if (this.fantome.groupe.visible) this.fantome.poser(this.doigts);
   }
 }
 
@@ -401,6 +419,8 @@ const DOIGTS = [
 ];
 const PLI = [1.45, 1.65, 1.05];           // angle max de chaque articulation d'un doigt (rad)
 const PLI_POUCE = [0.65, 0.8];
+// Écartement des doigts quand la main est ouverte (rad, vers le pouce < 0 < vers l'extérieur) ; ils se serrent en se pliant
+const ECART = [0.06, -0.09, -0.01, 0.07, 0.15];
 
 class ModeleMain {
   constructor(cote, fantome) {
@@ -444,6 +464,7 @@ class ModeleMain {
     this.racine = modele;
     // Axe de pliage de chaque doigt : perpendiculaire au doigt et à la paume
     const paume = new THREE.Vector3(-this.s, 0, 0);
+    this.normalePaume = paume.clone();
     this.axes = DOIGTS.map((chaine, d) => {
       const dir = this.os[chaine.at(-1)].p.clone().sub(this.os[chaine[0]].p).normalize();
       const vers = d === 0 ? paume.clone().add(new THREE.Vector3(0, 0, 0.5)).normalize() : paume;
@@ -459,6 +480,11 @@ class ModeleMain {
     const P = chaine.map((n) => this.os[n].p.clone());
     const Q = chaine.map((n) => this.os[n].q.clone());
     const axe = this.axes[d].clone();
+    // Écartement : tout le doigt pivote autour de la normale de la paume, à la jointure
+    const ecart = new THREE.Quaternion().setFromAxisAngle(this.normalePaume, ECART[d] * this.s * (1 - Math.min(1, t * 1.3)));
+    for (let k = 1; k < chaine.length; k++) P[k].sub(P[0]).applyQuaternion(ecart).add(P[0]);
+    for (let k = 0; k < chaine.length; k++) Q[k].premultiply(ecart);
+    axe.applyQuaternion(ecart);
     for (let j = 0; j < angles.length && j < chaine.length - 1; j++) {
       const rot = new THREE.Quaternion().setFromAxisAngle(axe, t * angles[j]);
       for (let k = j + 1; k < chaine.length; k++) P[k].sub(P[j]).applyQuaternion(rot).add(P[j]);

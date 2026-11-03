@@ -7,7 +7,9 @@ Adresse : **exteyz.github.io**
   falaises calcaires en couches (corniches herbeuses, neige en altitude), un belvédère avec vue sur le lac,
   des forêts de sapins, une barque qui flotte,
   un ponton et un village de chalets. Le Complexe Delta (hall, cour, entrepôt, bureaux, parcours) est au fond de la vallée.
-- Mains physiques à 5 doigts : elles se bloquent contre les murs, poussent les objets, sentent leur poids
+- Mains physiques à 5 doigts, comme dans Bonelab : chaque doigt suit le capteur de la manette sous lui (index posé ou non
+  sur la gâchette, pouce posé ou levé, majeur, annulaire et auriculaire avec la gâchette du majeur), donc on peut pointer,
+  faire un pouce levé ou serrer le poing ; les doigts s'écartent main ouverte. Elles se bloquent contre les murs, poussent les objets, sentent leur poids
   et referment les doigts autour de ce qu'elles tiennent.
 - Lancers, escalade, attraction d'objets à distance, inventaire sur le corps (hanches, dos, poitrine) et sac à dos.
 - Super-pouvoirs : feu bleu, super-héros (vol, force), toile, nécromancie (lévitation), super vitesse.
@@ -21,7 +23,8 @@ Le jeu choisit tout seul :
 
 - **Ultra** quand la page est ouverte sur un PC (casque branché par Quest Link ou Air Link) : c'est la carte graphique
   du PC qui dessine. Vrais sapins en 3D (rameaux et écorce photo), herbe dense jusqu'à 80 m, fougères, rochers moussus,
-  troncs morts, relief fin avec sept sols photo en 2K et leur relief, ombres douces sur 45 m, ciel photo 4K,
+  troncs morts, fleurs, galets sur les rives, relief fin avec sept sols photo en 2K et leur relief, ombres douces sur 70 m,
+  ombres des montagnes sur toute la vallée, herbe jusqu'à 140 m, ciel photo 4K,
   lac qui reflète la vallée. Sur l'écran du PC (sans casque), l'image passe en plus par un post-traitement
   « cinéma » : ombre des creux et des contacts, lueurs, étalonnage des couleurs.
   Premier lancement : environ 350 Mo à télécharger (ensuite gardés par le navigateur).

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { RAPIER, scene, ajouterSolideLointain } from './monde.js';
 import { PROFIL, ULTRA } from './profil.js';
-import { INTERIEUR, hauteur, hauteurSol, densiteForet, zoneLibre, aleatoire, pente, NIVEAU_LAC } from './terrain.js';
+import { INTERIEUR, hauteur, hauteurSol, densiteForet, zoneLibre, aleatoire, pente, soleilEn, NIVEAU_LAC } from './terrain.js';
 import { ressources } from './ressources.js';
 
 const HAUTEURS = [13, 18, 24, 30];          // les quatre modèles de sapin (m)
@@ -329,7 +329,7 @@ function placerArbresLointains(nombre) {
 
 // --- La forêt ---
 let foret = null;
-const m4 = new THREE.Matrix4(), qr = new THREE.Quaternion(), ve = new THREE.Vector3(), vp = new THREE.Vector3();
+const m4 = new THREE.Matrix4(), qr = new THREE.Quaternion(), ve = new THREE.Vector3(), vp = new THREE.Vector3(), couleurArbre = new THREE.Color();
 
 export function construireForet(renderer) {
   const P = ressources.materiaux;
@@ -393,7 +393,8 @@ if (distance(instanceMatrix[3].xz, centre3D.xz) < portee3D) transformed *= 0.0;`
       const t = (HAUTEURS[a.v] + 0.8) * a.s;
       m4.compose(vp.set(a.x, a.y - 0.5 * a.s, a.z), qr.setFromAxisAngle(HAUT, a.rot), ve.set(t, t, t));
       inst.setMatrixAt(i, m4);
-      inst.setColorAt(i, teinte.setHSL(0.27 + aleatoire(i) * 0.05, 0.12, 0.88 + aleatoire(i + 1) * 0.2));
+      // Teinte de chaque arbre, plus sombre s'il est à l'ombre d'une montagne
+      inst.setColorAt(i, teinte.setHSL(0.27 + aleatoire(i) * 0.05, 0.12, (0.88 + aleatoire(i + 1) * 0.2) * (0.42 + 0.58 * soleilEn(a.x, a.z))));
     });
     inst.receiveShadow = true;
     inst.computeBoundingSphere();
@@ -405,6 +406,7 @@ if (distance(instanceMatrix[3].xz, centre3D.xz) < portee3D) transformed *= 0.0;`
   const vrais = modeles.map((m) => {
     const max = arbres.length;
     const t = new THREE.InstancedMesh(m.tronc, matTronc, max), f = new THREE.InstancedMesh(m.feuillage, matFeuillage, max);
+    t.setColorAt(0, new THREE.Color(1, 1, 1)); f.setColorAt(0, new THREE.Color(1, 1, 1));   // couleurs par arbre (ombre des montagnes)
     t.count = f.count = 0;
     t.castShadow = f.castShadow = t.receiveShadow = f.receiveShadow = true;
     f.customDepthMaterial = ombreFeuillage;
@@ -438,9 +440,15 @@ export function majForet(pos, t) {
       if (Math.hypot(a.x - pos.x, a.z - pos.z) >= R) continue;
       const v = foret.vrais[a.v];
       m4.compose(vp.set(a.x, a.y, a.z), qr.setFromAxisAngle(HAUT, a.rot), ve.set(a.s, a.s, a.s));
+      couleurArbre.setScalar(0.42 + 0.58 * (a.soleil ??= soleilEn(a.x, a.z)));
+      v.t.setColorAt(v.t.count, couleurArbre);
+      v.f.setColorAt(v.f.count, couleurArbre);
       v.t.setMatrixAt(v.t.count++, m4);
       v.f.setMatrixAt(v.f.count++, m4);
     }
   }
-  for (const v of foret.vrais) v.t.instanceMatrix.needsUpdate = v.f.instanceMatrix.needsUpdate = true;
+  for (const v of foret.vrais) {
+    v.t.instanceMatrix.needsUpdate = v.f.instanceMatrix.needsUpdate = true;
+    if (v.t.instanceColor) v.t.instanceColor.needsUpdate = v.f.instanceColor.needsUpdate = true;
+  }
 }

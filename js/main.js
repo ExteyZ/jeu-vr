@@ -112,7 +112,7 @@ for (const [nom, couleur] of Object.entries(SOLS)) {
   t.needsUpdate = true;
   sols[nom] = { map: t, normalMap: null };   // couleur unie si la photo n'a pas pu être chargée
 }
-construireTerrain(sols);
+construireTerrain(sols, DIR_SOLEIL);
 construireEau(ressources.normalesEau);
 if (ecranChargement) ecranChargement.textContent = 'Plantation de la forêt…';
 await new Promise((ok) => setTimeout(ok, 30));
@@ -286,7 +286,10 @@ function lireVR() {
     const gp = src.gamepad;
     if (!gp) continue;
     const b = (n) => gp.buttons[n];
-    e.mains[cote] = { serrage: b(1)?.value ?? 0, gachette: b(0)?.value ?? 0, pouce: b(3)?.touched || b(4)?.touched || b(5)?.touched ? 1 : 0 };
+    // Capteurs tactiles (comme dans Bonelab) : pouce posé sur le joystick, les boutons ou le repose-pouce, index posé sur la gâchette
+    const touche = (n) => !!b(n)?.touched, appui = (n) => !!b(n)?.pressed;
+    const pouce = appui(3) || appui(4) || appui(5) ? 0.85 : touche(3) || touche(4) || touche(5) || touche(6) ? 0.5 : 0;
+    e.mains[cote] = { serrage: b(1)?.value ?? 0, gachette: b(0)?.value ?? 0, pouce, indexPose: touche(0) || (b(0)?.value ?? 0) > 0.03 };
     const x = gp.axes[2] ?? 0, y = gp.axes[3] ?? 0;
     if (cote === 'left') {
       e.stick = { x: zoneMorte(x), y: zoneMorte(y) };
@@ -350,8 +353,8 @@ function lirePC(dt) {
     tourne: 0,
     accroupir: t('KeyC') ? 1 : -1,
     mains: {
-      right: { serrage: Math.max(souris.right, t('KeyF')), gachette: t('KeyE'), pouce: 0 },
-      left: { serrage: Math.max(souris.left, t('KeyG')), gachette: t('KeyQ'), pouce: 0 },   // Q = touche A en AZERTY
+      right: { serrage: Math.max(souris.right, t('KeyF')), gachette: t('KeyE'), pouce: 0.5, indexPose: true },
+      left: { serrage: Math.max(souris.left, t('KeyG')), gachette: t('KeyQ'), pouce: 0.5, indexPose: true },   // Q = touche A en AZERTY
     },
   };
 }

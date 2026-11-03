@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { scene } from './monde.js';
 import { horsReflet } from './eau.js';
 import { PROFIL, ULTRA } from './profil.js';
-import { grilleInterieure, fbm, lisse, distanceLac, densiteForet, COMPLEXE, VILLAGE, NIVEAU_LAC } from './terrain.js';
+import { grilleInterieure, fbm, lisse, distanceLac, densiteForet, ombreDesMontagnes, COMPLEXE, VILLAGE, NIVEAU_LAC } from './terrain.js';
 import { opaciteLointaine } from './arbres.js';
 import { positionsChalets } from './village.js';
 
@@ -42,6 +42,7 @@ function texturesol() {
     donnees[i * 4] = H[i];
     donnees[i * 4 + 1] = densiteHerbe(x, z, H[i], penteSol);
     donnees[i * 4 + 2] = fbm(x / 40 - 7, z / 40 + 2, 2);   // zones plus sèches (herbe jaunie)
+    donnees[i * 4 + 3] = g.soleil?.[i] ?? 1;                 // ombre des montagnes
   }
   const t = new THREE.DataTexture(donnees, n, n, THREE.RGBAFormat, THREE.FloatType);
   t.minFilter = t.magFilter = THREE.NearestFilter;
@@ -80,6 +81,21 @@ function plancheTouffes() {
       g.quadraticCurveTo(bx + larg * 0.3 + penche * 0.2, bas - hb * 0.55, bx + larg / 2, bas);
       g.fill();
     }
+    // Deux touffes sur quatre portent des fleurs des Alpes (blanches, jaunes, violettes, roses) au bout d'une tige
+    if (t === 1 || t === 2) {
+      const couleurs = ['#f4f1e8', '#f2c230', '#8a5cc4', '#d84a7a', '#f4f1e8', '#5f7fd6'];
+      for (let i = 0; i < 16; i++) {
+        const fx = x0 + w * (0.08 + Math.random() * 0.84), fy = y0 + h * (0.3 + Math.random() * 0.4), r = 4 + Math.random() * 5;
+        g.strokeStyle = '#2f4a16'; g.lineWidth = 2.2;
+        g.beginPath(); g.moveTo(fx, y0 + h); g.quadraticCurveTo(fx + (Math.random() - 0.5) * 20, (fy + y0 + h) / 2, fx, fy); g.stroke();
+        g.fillStyle = couleurs[Math.floor(Math.random() * couleurs.length)];
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * Math.PI * 2;
+          g.beginPath(); g.ellipse(fx + Math.cos(a) * r * 0.75, fy + Math.sin(a) * r * 0.6, r * 0.6, r * 0.42, a, 0, Math.PI * 2); g.fill();
+        }
+        g.fillStyle = '#e8b72a'; g.beginPath(); g.arc(fx, fy, r * 0.35, 0, Math.PI * 2); g.fill();
+      }
+    }
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -112,8 +128,8 @@ export function construireHerbe() {
   const planche = plancheTouffes();
   const { touffes, rayon } = PROFIL.herbe;
   coucheHerbe(planche, { touffes, rayon, interieur: 0, grossissement: 1 });
-  // Ultra : deuxième couche, plus clairsemée et à plus grosses touffes, jusqu'à 80 m (la prairie reste une prairie au loin)
-  if (ULTRA) coucheHerbe(planche, { touffes: 26000, rayon: 80, interieur: rayon * 0.75, grossissement: 1.7 });
+  // Ultra : deuxième couche, plus clairsemée et à plus grosses touffes, jusqu'à 140 m (la prairie reste une prairie au loin)
+  if (ULTRA) coucheHerbe(planche, { touffes: 62000, rayon: 140, interieur: rayon * 0.75, grossissement: 2.0 });
 }
 
 function coucheHerbe(planche, { touffes, rayon, interieur, grossissement }) {
@@ -140,7 +156,7 @@ uniform float temps, pas, taille, n;
 uniform vec3 centre, pieds;
 uniform vec2 origine;
 uniform highp sampler2D tSol;
-varying float vSec, vHaut;
+varying float vSec, vHaut, vSoleilH;
 float solEn(ivec2 c, int canal) { c = clamp(c, ivec2(0), ivec2(int(n) - 1)); return texelFetch(tSol, c, 0)[canal]; }`)
       .replace('#include <beginnormal_vertex>', `
 // Position de la touffe : la copie la plus proche du joueur dans une grille qui se répète
@@ -153,6 +169,7 @@ float ha = solEn(c, 0), hb = solEn(c + ivec2(0, 1), 0), hc = solEn(c + ivec2(1, 
 float sol = (f.x + f.y <= 1.0) ? ha + (hd - ha) * f.x + (hb - ha) * f.y : hc + (hb - hc) * (1.0 - f.x) + (hd - hc) * (1.0 - f.y);
 float densite = mix(mix(solEn(c, 1), solEn(c + ivec2(1, 0), 1), f.x), mix(solEn(c + ivec2(0, 1), 1), solEn(c + ivec2(1, 1), 1), f.x), f.y);
 vSec = solEn(c, 2);
+vSoleilH = mix(mix(solEn(c, 3), solEn(c + ivec2(1, 0), 3), f.x), mix(solEn(c + ivec2(0, 1), 3), solEn(c + ivec2(1, 1), 3), f.x), f.y);
 float dist = length(rel);
 float echelle = (aRacine.w < densite ? 1.0 : 0.0) * (1.0 - smoothstep(${(rayon * 0.62).toFixed(1)}, ${rayon.toFixed(1)}, dist))
   * ${interieur > 0 ? `smoothstep(${(interieur * 0.7).toFixed(1)}, ${interieur.toFixed(1)}, dist)` : '1.0'};
@@ -180,7 +197,8 @@ transformed.y += v * hauteurTouffe * (1.0 - 0.3 * min(1.0, length(plie)) * v);`)
       .replace('#include <uv_vertex>', `#include <uv_vertex>
 vMapUv = vec2((vMapUv.x + mod(floor(aRacine.w * 4.0), 2.0)) * 0.5, (vMapUv.y + floor(fract(aRacine.w * 4.0) * 2.0)) * 0.5);`);
     shader.fragmentShader = opaciteLointaine(shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vSec, vHaut;')
+      .replace('#include <common>', '#include <common>\nvarying float vSec, vHaut, vSoleilH;')
+      .replace('#include <lights_fragment_begin>', ombreDesMontagnes('vSoleilH'))
       .replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.35, 1.15, 0.55), smoothstep(0.55, 0.8, vSec) * 0.6);
 diffuseColor.rgb *= 0.55 + 0.45 * vHaut;`)

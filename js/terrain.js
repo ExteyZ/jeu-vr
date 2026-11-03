@@ -188,6 +188,7 @@ function maillageRelief(g, materiau) {
     sol[i * 3 + 2] = 1 - Math.min(0.55, Math.max(0, creux) * 1.7) + Math.min(0.08, Math.max(0, -creux) * 0.4);
   }
   geo.setAttribute('aSol', new THREE.BufferAttribute(sol, 3));
+  geo.setAttribute('aSoleil', new THREE.BufferAttribute(g.soleil ?? new Float32Array(pos.count).fill(1), 1));
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, materiau);
@@ -221,14 +222,14 @@ function materiauRelief(t) {
     }
     u.niveauLac = { value: NIVEAU_LAC };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 aSol;\nvarying vec3 vSol;\nvarying vec3 vMonde;\nvarying vec3 vNormaleMonde;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSol = aSol;\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNormaleMonde = normalize(mat3(modelMatrix) * objectNormal);');
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSol;\nattribute float aSoleil;\nvarying vec3 vSol;\nvarying float vSoleil;\nvarying vec3 vMonde;\nvarying vec3 vNormaleMonde;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSol = aSol;\nvSoleil = aSoleil;\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNormaleMonde = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D c_herbe, c_solVert, c_foret, c_mousse, c_roche, c_neige, c_galets;
 uniform sampler2D n_herbe, n_foret, n_mousse, n_roche;
 uniform float niveauLac;
-varying vec3 vSol; varying vec3 vMonde; varying vec3 vNormaleMonde;
+varying vec3 vSol; varying float vSoleil; varying vec3 vMonde; varying vec3 vNormaleMonde;
 vec3 perturbation = vec3(0.0);
 // Deux échelles mélangées : moins de répétition visible au loin
 vec3 echant(sampler2D t, vec2 p, float s) {
@@ -308,6 +309,8 @@ perturbation += vec3(rl.x, 0.0, -rl.y) * 0.55 * loin;
 #if ULTRA
 normal = normalize((viewMatrix * vec4(normalize(nG + perturbation), 0.0)).xyz);
 #endif`)
+      // Ombre des montagnes (calculée au chargement) appliquée à la lumière du soleil
+      .replace('#include <lights_fragment_begin>', ombreDesMontagnes('vSoleil'))
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(mix(roughnessFactor, 0.8, wRoche), 0.6, wNeige);`);
   };
@@ -315,13 +318,48 @@ roughnessFactor = mix(mix(roughnessFactor, 0.8, wRoche), 0.6, wNeige);`);
 }
 
 // --- Construction ---
-export function construireTerrain(textures) {
+export function construireTerrain(textures, dirSoleil) {
   const materiau = materiauRelief(textures);
   const gInt = grille(INTERIEUR.x, INTERIEUR.z, INTERIEUR.taille, PROFIL.segmentsRelief);
-  maillageRelief(gInt, materiau);
-  collisionRelief(gInt);
   // Grand anneau lointain (8 km) : les montagnes autour de la vallée
   const gExt = grille(INTERIEUR.x, INTERIEUR.z, 8000, ULTRA ? 320 : 128, { x: INTERIEUR.x, z: INTERIEUR.z, demi: INTERIEUR.taille / 2 });
-  maillageRelief(gExt, materiau);
-  collisionRelief(gExt);
+  for (const g of [gInt, gExt]) {
+    calculerSoleil(g, dirSoleil);
+    maillageRelief(g, materiau);
+    collisionRelief(g);
+  }
+}
+
+// Morceau de shader : la lumière du soleil est multipliée par la part de soleil (variable GLSL donnée)
+export function ombreDesMontagnes(variable) {
+  return THREE.ShaderChunk.lights_fragment_begin.replace('getDirectionalLightInfo( directionalLight, directLight );',
+    `getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= ${variable};`);
+}
+
+// Ombres des montagnes : pour chaque point du relief, on avance vers le soleil ; si le relief passe au-dessus
+// du rayon, le point est à l'ombre (avec une pénombre douce qui s'élargit avec la distance)
+function calculerSoleil(g, d) {
+  const n = g.n, soleil = new Float32Array(n * n);
+  for (let l = 0; l < n; l++) for (let k = 0; k < n; k++) {
+    const x = g.x0 + k * g.pas, z = g.z0 + l * g.pas, y = g.hauteurs[l * n + k] + 0.8;
+    let vis = 1;
+    for (let t = g.pas * 1.5; t < 3000; t *= 1.14) {
+      const ecart = (y + d.y * t - hauteurSol(x + d.x * t, z + d.z * t)) / (t * 0.05 + 1);
+      if (ecart < vis) { vis = ecart; if (vis <= 0) break; }
+    }
+    soleil[l * n + k] = Math.max(0, vis);
+  }
+  g.soleil = soleil;
+}
+
+// Part de soleil reçue en (x, z) (1 = plein soleil, 0 = à l'ombre d'une montagne)
+export function soleilEn(x, z) {
+  for (const g of grilles) {
+    if (!g.soleil) continue;
+    const fx = (x - g.x0) / g.pas, fz = (z - g.z0) / g.pas, k = Math.floor(fx), l = Math.floor(fz);
+    if (k < 0 || l < 0 || k >= g.n - 1 || l >= g.n - 1) continue;
+    const a = fx - k, b = fz - l, S = g.soleil, n = g.n;
+    return (S[l * n + k] * (1 - a) + S[l * n + k + 1] * a) * (1 - b) + (S[(l + 1) * n + k] * (1 - a) + S[(l + 1) * n + k + 1] * a) * b;
+  }
+  return 1;
 }
