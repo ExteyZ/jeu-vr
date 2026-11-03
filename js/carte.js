@@ -560,7 +560,7 @@ function construireEntrepot() {
     const h = 3 - 0.25 * k;
     bloc([-26.25 + 0.5 * (k - 1), h / 2, 9.2], [0.5, h, 1.2], M.beton, { cg: CG_MARCHES });
   }
-  rampe([-20.5, 0, 9.2], [-26.5, 3, 9.2], 1.2);
+  rampe([-20.2, 0, 9.2], [-26.5, 3.08, 9.2], 1.2);
   // Garde-corps : ouvert en z 3.5..4.5 (échelle) et z 8.6..10 (escalier)
   const poteauGC = (x, z) => B([0.05, 1, 0.05], M.acierOrange, { pos: [x, 0, z] });
   creerObjet({ pos: [-26.55, 3.5, 0], formes: [
@@ -701,7 +701,7 @@ function construireParcours() {
     const h = 3 - 0.25 * k;
     bloc([-9.6, h / 2, -22.75 + 0.5 * (k - 1)], [1.2, h, 0.5], M.beton, { cg: CG_MARCHES });
   }
-  rampe([-9.6, 0, -17], [-9.6, 3, -23], 1.2);
+  rampe([-9.6, 0, -16.7], [-9.6, 3.08, -23], 1.2);
   creerObjet({ pos: [0, 3.5, 0], formes: [
     B([3.8, 0.05, 0.05], M.acierOrange, { pos: [-12.1, 0.5, -23.05] }),
     ...[-14, -12.1, -10.25].map((x) => B([0.05, 1, 0.05], M.acierOrange, { pos: [x, 0, -23.05] })),

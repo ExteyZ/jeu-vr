@@ -88,7 +88,7 @@ export function creerObjet({ pos, rot = [0, 0, 0], formes, masse = 0, friction =
   desc.setTranslation(...pos).setRotation(q);
   if (amortissement) desc.setLinearDamping(amortissement * 0.1).setAngularDamping(amortissement);
   // Résistance au roulement : sans elle, balles et cylindres rouleraient indéfiniment
-  else if (!fixe && formes.some((f) => f.type === 'boule' || f.type === 'cylindre')) desc.setLinearDamping(0.05).setAngularDamping(0.5);
+  else if (!fixe && formes.some((f) => f.type === 'boule' || f.type === 'cylindre')) desc.setLinearDamping(0.15).setAngularDamping(1.6);
   const corps = world.createRigidBody(desc);
 
   const physiques = formes.filter((f) => !f.visuel);
