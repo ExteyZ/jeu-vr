@@ -60,9 +60,10 @@ export function construireEau(textureNormales) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vProfondeur;\nuniform float tempsEau;')
       .replace('#include <color_fragment>', `#include <color_fragment>
-float fond = smoothstep(0.0, 9.0, vProfondeur);
-diffuseColor.rgb *= mix(vec3(0.035, 0.085, 0.075), vec3(0.004, 0.016, 0.02), fond);
-diffuseColor.a = mix(0.28, 0.94, smoothstep(0.0, 3.5, vProfondeur));
+float fond = smoothstep(0.0, 16.0, vProfondeur);
+// Eau de glacier : turquoise laiteux (les fines particules de roche diffusent la lumière)
+diffuseColor.rgb *= mix(vec3(0.07, 0.4, 0.37), vec3(0.006, 0.1, 0.13), fond);
+diffuseColor.a = mix(0.5, 0.97, smoothstep(0.0, 2.5, vProfondeur));
 // Écume légère au bord de l'eau
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.55, 0.52), (1.0 - smoothstep(0.0, 0.15, vProfondeur)) * 0.3);`)
       .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace(

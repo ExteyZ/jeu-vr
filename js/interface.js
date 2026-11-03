@@ -21,6 +21,7 @@ export class Interface {
     this.panneau = new THREE.Mesh(new THREE.PlaneGeometry(LARG, HAUT), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthTest: false }));
     this.panneau.renderOrder = 1000;
     this.panneau.visible = false;
+    this.panneau.userData.sansAO = true;
     scene.add(this.panneau);
     // Pointeur laser
     this.laser = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 1, 5, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fe0ff, depthTest: false, transparent: true }));
@@ -29,6 +30,7 @@ export class Interface {
     this.point.scale.setScalar(0.025);
     this.point.renderOrder = 1002;
     this.laser.visible = this.point.visible = false;
+    this.laser.userData.sansAO = true;
     scene.add(this.laser, this.point);
     this.ouvert = false;
     this.onglet = 'inventaire';
@@ -196,8 +198,8 @@ export class Interface {
     }, { taille: 22 });
     this.bouton(g, 'reset', 670, 126, 320, 60, 'Tout remettre en place', () => { this.actions.replacer(); this.info = 'Objets remis en place'; }, { taille: 22 });
     this.titre(g, 'Se téléporter', 30, 226);
-    [['hall', 'Hall du complexe'], ['ponton', 'Ponton du lac'], ['village', 'Village suisse'], ['sommet', 'Sommet de la montagne']].forEach(([id, nom], i) => {
-      this.bouton(g, 'tp-' + id, 30 + (i % 2) * 330, 246 + Math.floor(i / 2) * 76, 310, 64, nom, () => { this.actions.teleporter(id); this.fermer(); }, { taille: 24 });
+    [['hall', 'Hall du complexe'], ['ponton', 'Ponton du lac'], ['village', 'Village suisse'], ['belvedere', 'Belvédère du lac'], ['sommet', 'Sommet']].forEach(([id, nom], i) => {
+      this.bouton(g, 'tp-' + id, 30 + (i % 3) * 330, 246 + Math.floor(i / 3) * 76, 310, 64, nom, () => { this.actions.teleporter(id); this.fermer(); }, { taille: 24 });
     });
     g.fillStyle = '#b8c4d2'; g.font = '20px sans-serif'; g.textAlign = 'left';
     ['Y : inventaire   X : pouvoirs   B : pouvoir on/off', 'A : sauter   joystick droit bas : s\'accroupir', 'Gâchette du majeur : attraper   index : utiliser / pouvoir'].forEach((l, i) => g.fillText(l, 30, 430 + i * 34));

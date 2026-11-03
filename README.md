@@ -3,7 +3,9 @@
 Un jeu de physique en réalité virtuelle (WebXR) pour Meta Quest, qui marche directement dans le navigateur du casque.
 Adresse : **exteyz.github.io**
 
-- Une vallée suisse immense : montagnes, forêts de sapins, un grand lac où l'on nage, une barque qui flotte,
+- Une vallée suisse immense, inspirée du lac d'Oeschinen : un lac turquoise d'eau de glacier au pied d'un cirque de
+  falaises calcaires en couches (corniches herbeuses, neige en altitude), un belvédère avec vue sur le lac,
+  des forêts de sapins, une barque qui flotte,
   un ponton et un village de chalets. Le Complexe Delta (hall, cour, entrepôt, bureaux, parcours) est au fond de la vallée.
 - Mains physiques à 5 doigts : elles se bloquent contre les murs, poussent les objets, sentent leur poids
   et referment les doigts autour de ce qu'elles tiennent.
@@ -20,7 +22,9 @@ Le jeu choisit tout seul :
 - **Ultra** quand la page est ouverte sur un PC (casque branché par Quest Link ou Air Link) : c'est la carte graphique
   du PC qui dessine. Vrais sapins en 3D (rameaux et écorce photo), herbe dense jusqu'à 80 m, fougères, rochers moussus,
   troncs morts, relief fin avec sept sols photo en 2K et leur relief, ombres douces sur 45 m, ciel photo 4K,
-  lac qui reflète la vallée. Premier lancement : environ 350 Mo à télécharger (ensuite gardés par le navigateur).
+  lac qui reflète la vallée. Sur l'écran du PC (sans casque), l'image passe en plus par un post-traitement
+  « cinéma » : ombre des creux et des contacts, lueurs, étalonnage des couleurs.
+  Premier lancement : environ 350 Mo à télécharger (ensuite gardés par le navigateur).
 - **Quest** quand la page est ouverte dans le navigateur du casque seul : même monde, plus léger.
 
 On peut forcer un mode avec l'adresse : `?qualite=ultra` ou `?qualite=quest`.
@@ -43,7 +47,7 @@ exteyz.github.io dans Chrome ou Edge sur le PC, puis appuyer sur « ENTER VR ».
 | X | Panneau : super-pouvoirs |
 
 Le panneau a aussi un onglet **Options** : rotation fluide ou par crans, qualité d'image, tout remettre en place,
-et téléportation (hall, ponton, village, sommet).
+et téléportation (hall, ponton, village, belvédère, sommet).
 
 - **Ranger un objet** : lâche-le près d'une hanche, d'une épaule (dans le dos) ou de la poitrine. Serre la main au même endroit pour le reprendre.
 - **Attirer un objet** : vise-le main serrée (il s'entoure de jaune), puis donne un coup de poignet vers toi.
@@ -57,7 +61,7 @@ et téléportation (hall, ponton, village, sommet).
 - `js/interface.js` : panneau VR (inventaire, pouvoirs, options) avec pointeur laser
 - `js/catalogue.js` : objets qu'on fait apparaître depuis l'inventaire
 - `js/pouvoirs.js` : super-pouvoirs ; `js/effets.js` : particules, lueurs, rayons
-- `js/profil.js` : choix du mode graphique (Ultra sur PC, Quest dans le casque seul)
+- `js/profil.js` : choix du mode graphique (Ultra sur PC, Quest dans le casque seul) ; `js/rendu.js` : post-traitement sur l'écran du PC
 - `js/terrain.js` : relief de la vallée et ses sols ; `js/eau.js` : lac, reflets et flottaison ; `js/village.js` : chalets, ponton et barque
 - `js/arbres.js` : sapins réalistes et leurs imposteurs ; `js/herbe.js` : herbe ; `js/sousbois.js` : plantes, rochers et bois morts
 - `js/personnages.js` : habitants (animations, dialogues, réactions, chute physique)

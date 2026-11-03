@@ -23,7 +23,7 @@ function densiteHerbe(x, z, y, penteSol) {
   if (Math.hypot(x - VILLAGE.x, z - VILLAGE.z) < 9) return 0;                 // place de la fontaine
   for (const c of CHALETS) if (Math.hypot(x - c.x, z - c.z) < Math.max(c.l, c.p) * 0.62) return 0;
   if (Math.abs(x - 40) < 2.5 && z < -150 && z > -262) return 0;   // chemin du ponton
-  let d = 1 - lisse(0.2, 0.34, penteSol);
+  let d = 1 - lisse(0.38, 0.58, penteSol);   // l'herbe tient aussi dans les pentes raides (alpages)
   d *= 1 - lisse(290, 400, y);
   d *= 1 - 0.88 * densiteForet(x, z, y);
   d *= 0.8 + 0.2 * lisse(0.3, 0.6, fbm(x / 14 + 3, z / 14 - 8, 3));
@@ -189,6 +189,7 @@ diffuseColor.rgb *= 0.55 + 0.45 * vHaut;`)
   const herbe = new THREE.Mesh(geo, m);
   herbe.frustumCulled = false;
   herbe.receiveShadow = ULTRA;
+  herbe.userData.sansAO = true;
   scene.add(herbe);
   horsReflet.add(herbe);
   return herbe;

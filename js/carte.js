@@ -8,7 +8,7 @@
 //        └────────── HALL ──────────┘   <- départ
 //                 sud (+z)
 import * as THREE from 'three';
-import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer, CG_MARCHES, CG_RAMPE, enregistrerDetails } from './monde.js';
+import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer, CG_MARCHES, CG_RAMPE, enregistrerDetails, uvMonde } from './monde.js';
 import { creerMateriaux, texturePanneau, textureEnseigne } from './materiaux.js';
 import { jouerSon } from './sons.js';
 import { ressources, copieModele } from './ressources.js';
@@ -348,6 +348,8 @@ export function construireCarte() {
     parquet: 'parquet', plafond: 'plafond', tour: 'planches', bois: 'planches' };
   for (const [cle, ph] of Object.entries(remplacements)) if (P[ph]) M[cle] = P[ph];
   for (const nom of ['platre', 'plafond', 'marbre', 'parquet']) if (P[nom]) P[nom].envMapIntensity = 0.55;   // intérieur moins éclairé par le ciel
+  if (P.platre) P.platre.color.set(0xf4ead9);     // plâtre blanc cassé, chaleureux
+  if (P.planches) P.planches.color.set(0xc8955f);  // bois chaud (comptoir, lambris, poutres)
 
   // Sol général (herbe)
   // (le sol est désormais le relief de la vallée, voir terrain.js)
@@ -378,7 +380,10 @@ function construireHall() {
   mur(-8, 10, -8, 22, 4.5, M.mur);
   mur(8, 10, 8, 22, 4.5, M.mur);
   murOuvert(-8, 10, 8, 10, 4.5, M.mur, -2.5, 2.5, 3.2);
-  bloc([0, 4.65, 16], [16.3, 0.3, 12.3], M.plafond);
+  const plafondHall = M.blanc.clone();
+  plafondHall.color.set(0xf6efe4);
+  plafondHall.envMapIntensity = 0.3;   // à l'intérieur, la lumière vient surtout des lampes
+  bloc([0, 4.65, 16], [16.3, 0.3, 12.3], plafondHall);   // plafond en plâtre blanc entre les poutres
   for (const x of [-3.5, 3.5]) for (const z of [13, 19]) plafonnier(x, 4.48, z);
 
   // Accueil
@@ -433,6 +438,82 @@ function construireHall() {
     'Main serrée vers un objet + coup de poignet = attiré',
   ]), [-7.82, 2.3, 14.5], Math.PI / 2, 2.6, 1.3);
   panneau(textureEnseigne('COMPLEXE DELTA'), [0, 3.85, 10.17], 0, 4, 1);
+  detailsHall();
+}
+
+// Pièce de décor (sans collision) dont la texture garde sa taille réelle
+function boiteDecor([sx, sy, sz], materiau, pos, rot = [0, 0, 0]) {
+  const g = new THREE.BoxGeometry(sx, sy, sz);
+  uvMonde(g, [sx, sy, sz], materiau.userData?.tuile ?? 1);
+  ajouterDecor(g, materiau, pos, rot);
+}
+
+// Architecture intérieure du hall : lambris, plinthes, cimaise, corniche, pilastres, poutres, encadrement de porte, tapis
+function textureTapis() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 768;
+  const g = c.getContext('2d');
+  g.fillStyle = '#7a1c1c'; g.fillRect(0, 0, 512, 768);
+  // Bordures
+  for (const [m, coul, ep] of [[0, '#1f2a44', 46], [46, '#c9a76a', 8], [62, '#1f2a44', 18]]) { g.strokeStyle = coul; g.lineWidth = ep; g.strokeRect(m + ep / 2, m + ep / 2, 512 - 2 * m - ep, 768 - 2 * m - ep); }
+  for (let i = 0; i < 26; i++) {   // motifs de la bordure
+    g.fillStyle = '#c9a76a';
+    const t = i / 26;
+    for (const [x, y] of [[23, 30 + t * 708], [489, 30 + t * 708]]) { g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill(); }
+  }
+  // Médaillon central et losanges
+  g.save(); g.translate(256, 384);
+  for (const [r, coul] of [[150, '#c9a76a'], [138, '#1f2a44'], [96, '#a8322d'], [60, '#c9a76a'], [44, '#1f2a44']]) {
+    g.fillStyle = coul; g.beginPath(); g.moveTo(0, -r * 1.35); g.lineTo(r, 0); g.lineTo(0, r * 1.35); g.lineTo(-r, 0); g.closePath(); g.fill();
+  }
+  g.restore();
+  for (const [x, y] of [[150, 190], [362, 190], [150, 578], [362, 578]]) {
+    g.fillStyle = '#c9a76a'; g.beginPath(); g.moveTo(x, y - 30); g.lineTo(x + 22, y); g.lineTo(x, y + 30); g.lineTo(x - 22, y); g.closePath(); g.fill();
+  }
+  // Fibres : grain irrégulier
+  const img = g.getImageData(0, 0, 512, 768);
+  for (let i = 0; i < img.data.length; i += 4) { const n = 0.82 + Math.random() * 0.3; img.data[i] *= n; img.data[i + 1] *= n; img.data[i + 2] *= n; }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function detailsHall() {
+  const plinthe = M.couleur(0x2f241c, 0.6), moulure = M.blanc;
+  const lambris = M.bois.clone();
+  lambris.color.set(0xc8955f);   // bois chaud
+  lambris.userData = { ...M.bois.userData };
+  const murs = [
+    { a: [-7.85, 10.15], b: [-7.85, 21.85], axe: 'z' }, { a: [7.85, 10.15], b: [7.85, 21.85], axe: 'z' },
+    { a: [-7.85, 21.85], b: [7.85, 21.85], axe: 'x' },
+    { a: [-7.85, 10.15], b: [-2.62, 10.15], axe: 'x' }, { a: [2.62, 10.15], b: [7.85, 10.15], axe: 'x' },
+  ];
+  for (const m of murs) {
+    const l = m.axe === 'z' ? m.b[1] - m.a[1] : m.b[0] - m.a[0];
+    const cx = (m.a[0] + m.b[0]) / 2, cz = (m.a[1] + m.b[1]) / 2;
+    const dims = (h, ep) => (m.axe === 'z' ? [ep, h, l] : [l, h, ep]);
+    boiteDecor(dims(1.1, 0.04), lambris, [cx, 0.55, cz]);
+    boiteDecor(dims(0.14, 0.07), plinthe, [cx, 0.07, cz]);
+    boiteDecor(dims(0.07, 0.08), moulure, [cx, 1.13, cz]);
+    boiteDecor(dims(0.24, 0.18), moulure, [cx, 4.38, cz]);
+  }
+  // Pilastres le long des murs
+  for (const z of [12.6, 16, 19.4]) for (const x of [-7.85, 7.85]) boiteDecor([0.16, 4.3, 0.46], moulure, [x, 2.15, z]);
+  for (const x of [-4.6, 0, 4.6]) boiteDecor([0.46, 4.3, 0.16], moulure, [x, 2.15, 21.85]);
+  // Poutres en bois au plafond (entre les plafonniers)
+  for (const z of [14.5, 17.5]) boiteDecor([15.7, 0.3, 0.26], lambris, [0, 4.35, z]);
+  for (const x of [-5.6, 0, 5.6]) boiteDecor([0.26, 0.24, 11.7], lambris, [x, 4.38, 16]);
+  // Encadrement de la grande porte
+  for (const x of [-2.62, 2.62]) boiteDecor([0.24, 3.32, 0.44], moulure, [x, 1.66, 10]);
+  boiteDecor([5.48, 0.24, 0.44], moulure, [0, 3.32, 10]);
+  // Grand tapis
+  const tapis = new THREE.Mesh(new THREE.PlaneGeometry(4, 6), new THREE.MeshStandardMaterial({ map: textureTapis(), roughness: 0.95 }));
+  tapis.rotation.x = -Math.PI / 2;
+  tapis.position.set(0, 0.012, 16.6);
+  tapis.receiveShadow = true;
+  scene.add(tapis);
 }
 
 // --- Cour extérieure : x -14..14, z -10..10 ---

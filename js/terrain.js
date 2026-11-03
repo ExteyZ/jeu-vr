@@ -8,6 +8,7 @@ import { PROFIL, ULTRA } from './profil.js';
 export const NIVEAU_LAC = -2.5;
 export const LAC = { cx: 0, cz: -430, rx: 380, rz: 210 };
 export const VILLAGE = { x: 445, z: -300 };
+export const BELVEDERE = { x: -335, z: -215, h: 58 };   // colline au bord du lac (sud-ouest)
 const VALLEE = { x: 0, z: -230 };
 export const COMPLEXE = { x0: -40, x1: 38, z0: -34, z1: 30 };
 // Zone détaillée (1,6 km de côté) : relief fin, collisions précises, forêt et végétation
@@ -68,7 +69,30 @@ export function hauteur(x, z) {
   } else {
     h = Math.max(h, NIVEAU_LAC + 0.45);
     if (dl < 1.35) h = NIVEAU_LAC + 0.45 + (h - NIVEAU_LAC - 0.45) * lisse(1, 1.35, dl);
+    // Cirque de falaises calcaires au fond du lac (comme au lac d'Oeschinen) : des murs qui montent depuis la rive,
+    // en couches horizontales (une falaise, puis une corniche herbeuse, puis une falaise...), et des sommets au-dessus
+    const nord = lisse(LAC.cz + 60, LAC.cz - 200, z);
+    if (nord > 0) {
+      const irreg = fbm(x / 140 + 5, z / 140 - 9, 3) - 0.5;
+      // Contreforts et ravins : le pied de la falaise avance et recule le long du lac
+      const angle = Math.atan2(z - LAC.cz, x - LAC.cx);
+      const contrefort = crete(angle * 3.6 + 3.3, irreg * 1.2 + 0.7, 3) - 0.45;
+      const pied = 1.6 + contrefort * 0.3 + irreg * 0.3;
+      const talus = 150 * Math.pow(lisse(1.04, pied, dl), 1.3);   // pente boisée d'éboulis au pied des falaises
+      const falaise = 330 * Math.pow(lisse(pied, pied + 0.55, dl), 0.8) * (0.75 + 0.5 * crete(x / 300 + 2, z / 300 - 1, 3));
+      const cimes = (crete(x / 380 + 1.7, z / 380 + 4.1, 5) * 540 + fbm(x / 90, z / 90, 3) * 80) * lisse(pied + 0.3, pied + 1.7, dl);
+      // Couches de calcaire (épaisseur irrégulière) : une falaise, une corniche, une falaise...
+      let roc = falaise + cimes;
+      const bande = 46 + irreg * 24, decal = irreg * 80 + (fbm(x / 35, z / 35, 2) - 0.5) * 22, t = (roc + decal) / bande, k = Math.floor(t);
+      roc = roc * 0.35 + ((k + lisse(0.68, 1, t - k)) * bande - decal) * 0.65;
+      // Cassures du calcaire : blocs et fissures de quelques mètres sur les parois
+      roc += (crete(x / 14 + 7, z / 14 - 3, 3) - 0.4) * 9 * lisse(20, 80, roc);
+      h = Math.max(h, NIVEAU_LAC + 0.45 + Math.max(0, talus + roc) * nord);
+    }
   }
+  // Belvédère : une colline boisée au bord du lac, d'où l'on voit tout le lac et le cirque de falaises
+  const db = Math.hypot(x - BELVEDERE.x, z - BELVEDERE.z);
+  if (db < 170) h = Math.max(h, NIVEAU_LAC + BELVEDERE.h * Math.pow(lisse(170, 0, db), 1.7) + (fbm(x / 30, z / 30, 2) - 0.5) * 4 * lisse(170, 60, db));
   // Le complexe est construit sur un terrain parfaitement plat
   const dx = Math.max(COMPLEXE.x0 - x, 0, x - COMPLEXE.x1), dz = Math.max(COMPLEXE.z0 - z, 0, z - COMPLEXE.z1);
   const w = 1 - lisse(0, 35, Math.hypot(dx, dz));
@@ -99,8 +123,13 @@ export function zoneLibre(x, z, marge = 25) {
 
 // Densité de forêt (0 = prairie, 1 = forêt dense) : des massifs de sapins, jusqu'à la limite des arbres
 export function densiteForet(x, z, y = hauteur(x, z)) {
-  const f = fbm(x / 110 + 17, z / 110 - 3, 3) + (fbm(x / 23 + 4, z / 23 + 9, 2) - 0.5) * 0.12;
-  return lisse(0.44, 0.58, f) * (1 - lisse(300, 380, y));
+  let f = fbm(x / 110 + 17, z / 110 - 3, 3) + (fbm(x / 23 + 4, z / 23 + 9, 2) - 0.5) * 0.12;
+  // Forêts sombres et denses sur les rives du lac et au pied des falaises (sauf la rive sud, celle du ponton)
+  const dl = distanceLac(x, z), nord = lisse(LAC.cz + 60, LAC.cz - 200, z);
+  f += 0.3 * lisse(1.9, 1.12, dl) * (1 - lisse(LAC.cz + 40, LAC.cz + 150, z));
+  // Sur les falaises du cirque : seulement de l'herbe sur les corniches, pas de forêt
+  const sommetBelvedere = 1 - lisse(28, 65, Math.hypot(x - BELVEDERE.x, z - BELVEDERE.z));   // vue dégagée en haut du belvédère
+  return lisse(0.44, 0.58, f) * (1 - lisse(300, 380, y)) * (1 - nord * lisse(60, 140, y)) * (1 - sommetBelvedere);
 }
 
 // --- Relief : maillage + collision (une zone détaillée et un grand anneau lointain) ---
@@ -140,17 +169,25 @@ function maillageRelief(g, materiau) {
   const geo = new THREE.PlaneGeometry(g.taille, g.taille, g.n - 1, g.n - 1);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
-  // Nature du sol à chaque sommet : densité de forêt, et variation des prairies (plus ou moins vertes)
-  const sol = new Float32Array(pos.count * 2);
+  // Nature du sol à chaque sommet : densité de forêt, variation des prairies (plus ou moins vertes),
+  // et ombre des creux (ravins, pieds de falaises : plus bas que leurs alentours, donc moins éclairés par le ciel)
+  const sol = new Float32Array(pos.count * 3);
+  const H = g.hauteurs, n = g.n, r = g.pas < 10 ? 4 : 2, r2 = Math.max(1, r >> 1);
+  const lire = (kk, ll) => H[Math.min(n - 1, Math.max(0, ll)) * n + Math.min(n - 1, Math.max(0, kk))];
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   for (let i = 0; i < pos.count; i++) {
     // PlaneGeometry tournée : les sommets vont de -z à +z ligne par ligne, et de -x à +x
-    const k = i % g.n, ligne = Math.floor(i / g.n);
-    const x = g.x0 + k * g.pas, z = g.z0 + ligne * g.pas, y = g.hauteurs[ligne * g.n + k];
+    const k = i % n, ligne = Math.floor(i / n);
+    const x = g.x0 + k * g.pas, z = g.z0 + ligne * g.pas, y = H[ligne * n + k];
     pos.setXYZ(i, x, y, z);
-    sol[i * 2] = zoneLibre(x, z, 4) ? densiteForet(x, z, y) : 0;
-    sol[i * 2 + 1] = fbm(x / 60 + 31, z / 60 - 12, 3);
+    sol[i * 3] = zoneLibre(x, z, 4) ? densiteForet(x, z, y) : 0;
+    sol[i * 3 + 1] = fbm(x / 60 + 31, z / 60 - 12, 3);
+    let somme = 0;
+    for (const [dx, dz] of DIRS) somme += lire(k + dx * r, ligne + dz * r) + lire(k + dx * r2, ligne + dz * r2);
+    const creux = (somme / 16 - y) / (g.pas * r);
+    sol[i * 3 + 2] = 1 - Math.min(0.55, Math.max(0, creux) * 1.7) + Math.min(0.08, Math.max(0, -creux) * 0.4);
   }
-  geo.setAttribute('aSol', new THREE.BufferAttribute(sol, 2));
+  geo.setAttribute('aSol', new THREE.BufferAttribute(sol, 3));
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, materiau);
@@ -184,14 +221,14 @@ function materiauRelief(t) {
     }
     u.niveauLac = { value: NIVEAU_LAC };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aSol;\nvarying vec2 vSol;\nvarying vec3 vMonde;\nvarying vec3 vNormaleMonde;')
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSol;\nvarying vec3 vSol;\nvarying vec3 vMonde;\nvarying vec3 vNormaleMonde;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSol = aSol;\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNormaleMonde = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D c_herbe, c_solVert, c_foret, c_mousse, c_roche, c_neige, c_galets;
 uniform sampler2D n_herbe, n_foret, n_mousse, n_roche;
 uniform float niveauLac;
-varying vec2 vSol; varying vec3 vMonde; varying vec3 vNormaleMonde;
+varying vec3 vSol; varying vec3 vMonde; varying vec3 vNormaleMonde;
 vec3 perturbation = vec3(0.0);
 // Deux échelles mélangées : moins de répétition visible au loin
 vec3 echant(sampler2D t, vec2 p, float s) {
@@ -211,7 +248,7 @@ float dist = length(vMonde - cameraPosition);
 vec3 herbe = echant(c_herbe, vMonde.xz, 2.5);
 vec3 solVert = echant(c_solVert, vMonde.xz, 3.0);
 vec3 prairie = mix(herbe, solVert, smoothstep(0.55, 0.85, variation) * 0.7);
-prairie *= mix(vec3(0.27, 0.5, 0.15), vec3(0.4, 0.58, 0.2), smoothstep(0.3, 0.75, variation));
+prairie *= mix(vec3(0.21, 0.47, 0.12), vec3(0.31, 0.53, 0.15), smoothstep(0.3, 0.75, variation));
 // Sous les sapins : tapis d'aiguilles brunes
 vec3 aiguilles = echant(c_foret, vMonde.xz, 2.5);
 // Roches : moussue dans les pentes moyennes, falaise grise projetée sur trois axes dans les pentes fortes
@@ -225,17 +262,22 @@ roche = mix(roche, mix(vec3(0.3, 0.3, 0.29), rocheLoin * 0.8, 0.45), loin);
 #else
 roche = mix(roche, vec3(0.32, 0.31, 0.3), loin * 0.85);
 #endif
+// Calcaire en couches : bandes plus claires et plus sombres, et traînées sombres verticales (ruissellement)
+float strate = 0.94 + 0.06 * sin(vMonde.y * 0.31 + variation * 4.0 + sin(vMonde.x * 0.02) * 1.5) + 0.04 * sin(vMonde.y * 1.13 + vMonde.x * 0.013);
+float trainee = 1.0 - 0.13 * smoothstep(0.6, 1.0, sin(vMonde.x * 0.037 + sin(vMonde.z * 0.023) * 2.5 + vMonde.z * 0.029) * sin(vMonde.y * 0.013 + vMonde.x * 0.004));
+roche *= strate * mix(1.0, trainee, smoothstep(0.4, 0.7, penteSol));
+roche *= mix(vec3(0.7, 0.71, 0.74), vec3(0.82, 0.76, 0.66), smoothstep(0.25, 0.75, variation));   // calcaire gris à beige
 vec3 mousse = echant(c_mousse, vMonde.xz, 4.0);
-vec3 neige = echant(c_neige, vMonde.xz, 3.0) * 0.86;
+vec3 neige = echant(c_neige, vMonde.xz, 3.0) * 0.9;
 vec3 galets = echant(c_galets, vMonde.xz, 2.0) * 0.72;
 float wForet = smoothstep(0.25, 0.75, foret);
 float wMousse = smoothstep(0.16, 0.3, penteSol + (variation - 0.5) * 0.08);
 // En bas des montagnes, seules les vraies falaises sont en roche nue : le reste est vert (comme dans les Alpes)
 float altitudeRoche = smoothstep(70.0, 260.0, vMonde.y);
 float wRoche = smoothstep(mix(0.5, 0.33, altitudeRoche), mix(0.68, 0.5, altitudeRoche), penteSol + (variation - 0.5) * 0.06);
-float hauteurNeige = 800.0 + variation * 160.0;
-float wNeige = smoothstep(hauteurNeige, hauteurNeige + 90.0, vMonde.y) * (1.0 - smoothstep(0.3, 0.5, penteSol));
-float wGalets = 1.0 - smoothstep(niveauLac + 0.6, niveauLac + 1.5, vMonde.y + (variation - 0.5) * 0.6);
+float hauteurNeige = 470.0 + variation * 240.0;
+float wNeige = smoothstep(hauteurNeige, hauteurNeige + 60.0, vMonde.y) * (1.0 - smoothstep(0.36, 0.6, penteSol));
+float wGalets = 1.0 - smoothstep(niveauLac + 0.3, niveauLac + 0.75, vMonde.y + (variation - 0.5) * 0.3);
 // Vus de loin : les prairies sont plus sombres et les forêts forment des masses vert foncé (la cime des sapins)
 prairie *= mix(vec3(1.0), vec3(0.6, 0.74, 0.56), loin);
 aiguilles = mix(aiguilles, vec3(0.05, 0.085, 0.045), loin * 0.85);
@@ -246,7 +288,7 @@ couleur = mix(couleur, galets, wGalets);
 couleur = mix(couleur, neige, wNeige);
 // Grandes taches plus claires / plus sombres (le relief n'a pas partout la même couleur)
 float macro = 0.5 + 0.5 * sin(vMonde.x * 0.0061 + sin(vMonde.z * 0.0043) * 2.3) * sin(vMonde.z * 0.0052 + vMonde.x * 0.0017);
-couleur *= 0.84 + 0.32 * macro;
+couleur *= (0.84 + 0.32 * macro) * vSol.z;   // et l'ombre des creux
 // Lumière ambiante plus faible sous les arbres, sol plus sombre sous l'eau
 couleur *= 1.0 - 0.18 * wForet;
 couleur *= mix(vec3(1.0), vec3(0.42, 0.58, 0.62), smoothstep(niveauLac, niveauLac - 6.0, vMonde.y));

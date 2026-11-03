@@ -50,6 +50,12 @@ export class Joueur {
     return out.lengthSq() > 1e-6 ? out.normalize() : out.set(0, 0, -1);
   }
 
+  // Angle (autour de la verticale) de la direction où l'on regarde
+  lacetRegard() {
+    const d = this.directionRegard(tmp);
+    return Math.atan2(-d.x, -d.z);
+  }
+
   // Tourne d'un coup autour de la tête (pour ne pas se déplacer en tournant)
   tourner(angle) {
     this.rig.updateMatrixWorld(true);

@@ -128,19 +128,21 @@ function construireSapin(H, graine, rameaux) {
       const chute = 0.06 + 0.34 * (1 - t) + rnd() * 0.1;
       const dx = Math.cos(a), dz = Math.sin(a);
       const point = (s, out) => out.set(dx * s * L, y - chute * s * L - 0.1 * L * s * s * (1 - t), dz * s * L);
-      const nbr = Math.max(1, Math.round(L / 0.5));
+      const nbr = Math.max(1, Math.round(L / 0.36));
       for (let i = 1; i <= nbr; i++) {
         const s = i / nbr;
         point(s, p);
         tangente.subVectors(point(Math.min(1, s + 0.05), q), point(Math.max(0, s - 0.05), f)).normalize();
-        const taille = (0.55 + rnd() * 0.45) * (1 - 0.4 * t) * Math.min(1, 0.55 + L * 0.22);
+        const taille = (0.65 + rnd() * 0.5) * (1 - 0.4 * t) * Math.min(1, 0.55 + L * 0.22);
         // Ombre interne : plus sombre près du tronc et en bas de l'arbre
-        const ombre = (0.42 + 0.58 * (0.25 + 0.75 * s)) * (0.72 + 0.28 * t);
+        const ombre = (0.3 + 0.7 * (0.2 + 0.8 * s)) * (0.66 + 0.34 * t);
         for (const cote of [-1, 1]) {
           f.copy(tangente).applyAxisAngle(HAUT, cote * (0.7 + rnd() * 0.45));
           f.y -= 0.04 + rnd() * 0.12;
           rameau(p, f.normalize(), taille, ombre);
         }
+        // Un rameau couché sur la branche (elle paraît pleine), et un au bout
+        f.copy(tangente); f.y += 0.15; rameau(p, f.normalize(), taille * 0.9, ombre * 0.92);
         if (i === nbr) rameau(p, tangente, taille * 1.15, ombre);
       }
     }
@@ -339,7 +341,7 @@ export function construireForet(renderer) {
   const matFeuillage = new THREE.MeshStandardMaterial({
     map: planche.couleur, alphaMap: planche.alpha, normalMap: planche.normales, vertexColors: true,
     alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.82, metalness: 0, alphaToCoverage: ULTRA,
-    color: new THREE.Color(0.6, 0.68, 0.54), envMapIntensity: 0.45,
+    color: new THREE.Color(0.48, 0.56, 0.42), envMapIntensity: 0.45,
   });
   if (planche.normales) matFeuillage.normalScale.set(0.6, 0.6);
   animerFeuillage(matFeuillage, 1);
@@ -395,6 +397,7 @@ if (distance(instanceMatrix[3].xz, centre3D.xz) < portee3D) transformed *= 0.0;`
     });
     inst.receiveShadow = true;
     inst.computeBoundingSphere();
+    inst.userData.sansAO = true;   // (déplacés par la carte graphique : pas d'occlusion ambiante)
     scene.add(inst);
   }
 

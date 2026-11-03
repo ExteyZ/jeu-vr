@@ -60,7 +60,7 @@ function forme(f) {
 }
 
 // Sur le décor, les textures se répètent selon la taille réelle (1 motif = "tuile" mètres)
-function uvMonde(geo, [sx, sy, sz], tuile) {
+export function uvMonde(geo, [sx, sy, sz], tuile) {
   const uv = geo.attributes.uv;
   const dims = [[sz, sy], [sz, sy], [sx, sz], [sx, sz], [sx, sy], [sx, sy]];   // faces +x -x +y -y +z -z
   for (let face = 0; face < 6; face++) {

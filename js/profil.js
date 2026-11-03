@@ -12,7 +12,7 @@ export const PROFIL = ULTRA ? {
   segmentsRelief: 512,          // zone détaillée de 1,6 km : un point tous les 3,1 m
   ombre: { taille: 4096, portee: 45 },
   herbe: { touffes: 50000, rayon: 30 },
-  arbres: { nombre: 9000, portee3D: 75, impostor: 1024 },
+  arbres: { nombre: 12000, portee3D: 62, impostor: 1024 },
   sousBois: { rayon: 90, densite: 1 },
   lampes: true,
 } : {

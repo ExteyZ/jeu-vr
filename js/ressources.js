@@ -26,7 +26,7 @@ export const MATERIAUX_PH = {
   solVert: { id: 'forrest_ground_01', tuile: 3, cartes: ['diff', 'nor_gl'] },
   foret: { id: 'forest_ground_04', tuile: 2.5, cartes: ['diff', 'nor_gl'] },
   mousse: { id: 'rocky_terrain_02', tuile: 4, cartes: ['diff', 'nor_gl'] },
-  roche: { id: 'aerial_rocks_02', tuile: 4, cartes: ['diff', 'nor_gl'] },
+  roche: { id: 'marble_cliff_05', tuile: 6, cartes: ['diff', 'nor_gl'] },   // calcaire gris des falaises
   neige: { id: 'snow_02', tuile: 3, cartes: ['diff'] },
   galets: { id: 'dry_river_pebbles', tuile: 2, cartes: ['diff'] },
   // Écorce des sapins, pierre et tuiles des chalets
@@ -83,6 +83,29 @@ async function materiauPH(nom, { id, tuile, cartes = ['diff', 'nor_gl', 'arm'] }
   return m;
 }
 
+// Ciel photo : ciel bleu dégagé de fin de matinée (soleil assez haut, les falaises sont bien éclairées)
+const CIEL = 'qwantani_mid_morning_puresky';
+
+// Le soleil est le point le plus lumineux du ciel photo : on en déduit sa direction, pour que les ombres du jeu
+// tombent dans le même sens que la lumière du ciel
+function trouverSoleil(hdr) {
+  try {
+    const { data, width: L, height: H } = hdr.image;
+    const lire = data instanceof Uint16Array ? (i) => THREE.DataUtils.fromHalfFloat(data[i]) : (i) => data[i];
+    let max = -1, meilleur = 0;
+    for (let y = 0; y < H / 2; y += 2) for (let x = 0; x < L; x += 2) {
+      const i = (y * L + x) * 4, lum = lire(i) * 0.2126 + lire(i + 1) * 0.7152 + lire(i + 2) * 0.0722;
+      if (lum > max) { max = lum; meilleur = y * L + x; }
+    }
+    const u = ((meilleur % L) + 0.5) / L, v = 1 - (Math.floor(meilleur / L) + 0.5) / H;   // image retournée (flipY)
+    const theta = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
+    const d = new THREE.Vector3(Math.cos(theta) * Math.cos(lat), Math.sin(lat), Math.sin(theta) * Math.cos(lat));
+    return d.y > 0.25 ? d.normalize() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Charge tout, en appelant progression(fraction) au fur et à mesure
 export async function chargerRessources(renderer, progression = () => {}) {
   const taches = [];
@@ -91,8 +114,9 @@ export async function chargerRessources(renderer, progression = () => {}) {
   const suivre = (p) => Promise.race([p.catch((e) => console.warn(e)), new Promise((ok) => setTimeout(ok, 40000))])
     .finally(() => progression(++finies / taches.length));
 
-  taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/${PROFIL.ciel}/kloofendal_48d_partly_cloudy_puresky_${PROFIL.ciel}.hdr`).then((hdr) => {
+  taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/${PROFIL.ciel}/${CIEL}_${PROFIL.ciel}.hdr`).then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
+    ressources.directionSoleil = trouverSoleil(hdr);
     const pmrem = new THREE.PMREMGenerator(renderer);
     ressources.environnement = pmrem.fromEquirectangular(hdr).texture;
     ressources.ciel = hdr;

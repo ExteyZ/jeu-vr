@@ -9,7 +9,7 @@ import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
-import { construireTerrain, hauteur, NIVEAU_LAC, VILLAGE } from './terrain.js';
+import { construireTerrain, hauteur, hauteurSol, NIVEAU_LAC, VILLAGE, BELVEDERE } from './terrain.js';
 import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, horsReflet } from './eau.js';
 import { construireVillage } from './village.js';
 import { Pouvoirs } from './pouvoirs.js';
@@ -20,6 +20,7 @@ import { PROFIL, ULTRA } from './profil.js';
 import { construireForet, majForet } from './arbres.js';
 import { construireHerbe, majHerbe } from './herbe.js';
 import { construireSousBois, majSousBois } from './sousbois.js';
+import { creerRenduEcran } from './rendu.js';
 
 // --- Rendu ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -27,8 +28,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 if (ULTRA) renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // ombres aux bords doux (carte graphique du PC)
-renderer.toneMapping = THREE.ACESFilmicToneMapping;   // rendu "photo" : hautes lumières douces
-renderer.toneMappingExposure = 0.9;
+renderer.toneMapping = THREE.NeutralToneMapping;   // rendu "photo" : couleurs vives et fidèles, hautes lumières douces
+renderer.toneMappingExposure = 1.0;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 renderer.xr.setFoveation(1);
@@ -48,6 +49,7 @@ const texCiel = new THREE.CanvasTexture(toileCiel);
 texCiel.colorSpace = THREE.SRGBColorSpace;
 const ciel = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16), new THREE.MeshBasicMaterial({ map: texCiel, side: THREE.BackSide, fog: false, depthWrite: false }));
 ciel.renderOrder = -1;
+ciel.userData.sansAO = true;
 scene.add(ciel);
 
 // Ciel photo (HDRI), matériaux et modèles réalistes
@@ -65,7 +67,7 @@ if (ressources.environnement) {
 }
 scene.add(ambiance);
 // Lampes intérieures (sans ombres, pour rester fluide sur le Quest)
-const lampeHall = new THREE.PointLight(0xfff0d8, 22, 16, 1.6);
+const lampeHall = new THREE.PointLight(0xffe8c8, 38, 18, 1.5);
 lampeHall.position.set(0, 4.1, 16);
 const lampeEntrepot = new THREE.PointLight(0xfff0d8, 40, 24, 1.6);
 lampeEntrepot.position.set(-23, 6.4, 0);
@@ -80,7 +82,7 @@ soleil.shadow.normalBias = ULTRA ? 0.03 : 0.04;
 if (ULTRA) soleil.shadow.radius = 2;
 scene.add(soleil, soleil.target);
 // Direction du soleil (vers le soleil), et repère de la "caméra d'ombre" pour l'aligner sur ses pixels (pas de scintillement)
-const DIR_SOLEIL = new THREE.Vector3(0.42, 0.72, 0.55).normalize();
+const DIR_SOLEIL = (ressources.directionSoleil ?? new THREE.Vector3(0.42, 0.72, 0.55)).clone().normalize();   // le vrai soleil du ciel photo
 const axeDroite = new THREE.Vector3().crossVectors(DIR_SOLEIL, new THREE.Vector3(0, 1, 0)).normalize();
 const axeHaut = new THREE.Vector3().crossVectors(axeDroite, DIR_SOLEIL).normalize();
 const centreOmbre = new THREE.Vector3();
@@ -145,7 +147,7 @@ function majCadran() {
 
 // --- Qualité automatique : si le casque n'arrive pas à suivre 3 secondes de suite, on allège ---
 // Niveaux : 0 = tout (ombres fines, lampes), 1 = lampes coupées et ombres plus grossières, 2 = sans ombres
-let qualite = 0, secondesLentes = 0, qualiteChoisie = 'auto';
+let qualite = 0, secondesLentes = 0, secondesLentesEcran = 0, qualiteChoisie = 'auto';
 function appliquerQualite(niveau) {
   if (niveau === qualite) return;
   const ombresAvant = renderer.shadowMap.enabled;
@@ -158,7 +160,13 @@ function appliquerQualite(niveau) {
   if (renderer.shadowMap.enabled !== ombresAvant) scene.traverse((o) => { if (o.material) [o.material].flat().forEach((m) => { m.needsUpdate = true; }); });
 }
 function qualiteAuto(enVR) {
-  if (!enVR || qualiteChoisie !== 'auto') return;
+  if (!enVR) {
+    // Écran du PC : si l'image saccade (moins de 40 images par seconde pendant 3 s), on coupe l'occlusion ambiante
+    secondesLentesEcran = ips < 40 && tempsJeu > 15 && !document.hidden ? secondesLentesEcran + 1 : 0;   // (pas pendant le démarrage)
+    if (secondesLentesEcran >= 3 && renduEcran?.alleger()) message('Ombres de contact coupées pour rester fluide');
+    return;
+  }
+  if (qualiteChoisie !== 'auto') return;
   secondesLentes = ips < 62 ? secondesLentes + 1 : 0;
   if (secondesLentes < 3 || qualite >= 2) return;
   secondesLentes = 0;
@@ -202,11 +210,15 @@ const DESTINATIONS = {
   ponton: { nom: 'Ponton du lac', pos: () => [40, NIVEAU_LAC + 0.78, -240] },
   village: { nom: 'Village', pos: () => [VILLAGE.x, hauteur(VILLAGE.x, VILLAGE.z - 6), VILLAGE.z - 6] },
   sommet: { nom: `Sommet (${Math.round(sommet.y)} m)`, pos: () => [sommet.x, sommet.y + 0.3, sommet.z] },
+  // Le belvédère : la vue sur le lac et le cirque de falaises
+  belvedere: { nom: 'Belvédère du lac', pos: () => [BELVEDERE.x + 22, hauteurSol(BELVEDERE.x + 22, BELVEDERE.z - 16) + 0.1, BELVEDERE.z - 16], regard: [20, -540] },
 };
 function teleporter(id) {
   for (const m of listeMains) m.lacher();
   pouvoirs.lacherTout();
-  joueur.teleporter(...DESTINATIONS[id].pos());
+  const d = DESTINATIONS[id], p = d.pos();
+  joueur.teleporter(...p);
+  if (d.regard) joueur.tourner(Math.atan2(-(d.regard[0] - p[0]), -(d.regard[1] - p[2])) - joueur.lacetRegard());
   message(DESTINATIONS[id].nom);
 }
 
@@ -228,6 +240,7 @@ texMsg.colorSpace = THREE.SRGBColorSpace;
 const panneauMsg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.125), new THREE.MeshBasicMaterial({ map: texMsg, transparent: true, depthTest: false }));
 panneauMsg.renderOrder = 999;
 panneauMsg.visible = false;
+panneauMsg.userData.sansAO = true;
 scene.add(panneauMsg);
 let dureeMsg = 0, placerMsg = false;
 function message(texte, duree = 2.5) {
@@ -426,10 +439,12 @@ function majSousEau(t) {
 
 renderer.xr.addEventListener('sessionstart', () => { tangage = 0; document.exitPointerLock?.(); message('Bienvenue ! Y : inventaire   X : super-pouvoirs', 5); });
 renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.65, 0); camera.quaternion.identity(); });
+let renduEcran = null;   // rendu "cinéma" de l'écran du PC (créé à la fin du chargement)
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  renduEcran?.redimensionner(innerWidth, innerHeight);
 });
 
 // --- Boucle de jeu ---
@@ -559,7 +574,8 @@ function boucle(dtImpose) {
   majSousEau(tete);
   if (images % 6 === 0) masquerLointains(tete);
   animerEau(tempsJeu);
-  renderer.render(scene, camera);
+  if (renduEcran && !enVR) renduEcran.rendre();   // écran du PC : image "cinéma" (occlusion, lueurs, étalonnage)
+  else renderer.render(scene, camera);
   majAuditeur(camera);
 
   // Images par seconde mesurées en temps réel (le pas de physique, lui, est plafonné)
@@ -587,6 +603,7 @@ scene.traverse((o) => {
   }
 });
 try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn(e); }
+renduEcran = ULTRA ? creerRenduEcran(renderer, scene, camera) : null;
 renderer.setAnimationLoop(() => boucle());
 
 document.getElementById('chargement')?.remove();
