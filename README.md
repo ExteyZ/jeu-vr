@@ -51,7 +51,7 @@ exteyz.github.io dans Chrome ou Edge sur le PC, puis appuyer sur « ENTER VR ».
 | X | Panneau : super-pouvoirs |
 
 Le panneau a aussi un onglet **Options** : rotation fluide ou par crans, qualité d'image, tout remettre en place,
-et téléportation (hall, ponton, village, belvédère, sommet).
+et téléportation (place du village, port, chalets, belvédère, sommet).
 
 - **Ranger un objet** : lâche-le près d'une hanche, d'une épaule (dans le dos) ou de la poitrine. Serre la main au même endroit pour le reprendre.
 - **Attirer un objet** : vise-le main serrée (il s'entoure de jaune), puis donne un coup de poignet vers toi.
