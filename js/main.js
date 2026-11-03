@@ -1,7 +1,7 @@
 // Point d'entrée : rendu, contrôles (VR et PC) et boucle de jeu.
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { RAPIER, world, scene, objets, infos, manettes, vibrer, synchroniserObjets, replacer } from './monde.js';
+import { RAPIER, world, scene, objets, infos, manettes, vibrer, synchroniserObjets, replacer, masquerLointains } from './monde.js';
 import { MainPhysique, crochets, piloterObjetsTenus } from './mains.js';
 import { Joueur } from './joueur.js';
 import { Inventaire } from './inventaire.js';
@@ -9,9 +9,13 @@ import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
-import { construireTerrain } from './terrain.js';
-import { construireEau, animerEau, flotter } from './eau.js';
+import { construireTerrain, hauteur, NIVEAU_LAC, VILLAGE } from './terrain.js';
+import { construireEau, animerEau, flotter, dansLeLac } from './eau.js';
 import { construireVillage } from './village.js';
+import { Pouvoirs } from './pouvoirs.js';
+import { Interface } from './interface.js';
+import { majEffets } from './effets.js';
+import { creerCatalogue } from './catalogue.js';
 
 // --- Rendu ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -109,24 +113,31 @@ function majCadran() {
 }
 
 // --- Qualité automatique : si le casque n'arrive pas à suivre 3 secondes de suite, on allège ---
-let qualite = 0, secondesLentes = 0;
+// Niveaux : 0 = tout (ombres fines, lampes), 1 = lampes coupées et ombres plus grossières, 2 = sans ombres
+let qualite = 0, secondesLentes = 0, qualiteChoisie = 'auto';
+function appliquerQualite(niveau) {
+  if (niveau === qualite) return;
+  const ombresAvant = renderer.shadowMap.enabled;
+  qualite = niveau;
+  lampeHall.visible = lampeEntrepot.visible = niveau === 0;
+  soleil.shadow.mapSize.setScalar(niveau === 0 ? 1024 : 512);
+  soleil.shadow.map?.dispose();
+  soleil.shadow.map = null;
+  renderer.shadowMap.enabled = niveau < 2;
+  if (renderer.shadowMap.enabled !== ombresAvant) scene.traverse((o) => { if (o.material) [o.material].flat().forEach((m) => { m.needsUpdate = true; }); });
+}
 function qualiteAuto(enVR) {
-  if (!enVR) return;
+  if (!enVR || qualiteChoisie !== 'auto') return;
   secondesLentes = ips < 62 ? secondesLentes + 1 : 0;
   if (secondesLentes < 3 || qualite >= 2) return;
   secondesLentes = 0;
-  qualite++;
-  if (qualite === 1) {
-    lampeHall.visible = lampeEntrepot.visible = false;
-    soleil.shadow.mapSize.set(512, 512);
-    soleil.shadow.map?.dispose();
-    soleil.shadow.map = null;
-    message('Qualité réduite pour rester fluide');
-  } else {
-    renderer.shadowMap.enabled = false;
-    scene.traverse((o) => { if (o.material) [o.material].flat().forEach((m) => { m.needsUpdate = true; }); });
-    message('Ombres coupées pour rester fluide');
-  }
+  appliquerQualite(qualite + 1);
+  message(qualite === 1 ? 'Qualité réduite pour rester fluide' : 'Ombres coupées pour rester fluide');
+}
+function choisirQualite(q) {
+  qualiteChoisie = q;
+  secondesLentes = 0;
+  appliquerQualite(q === 'basse' ? 2 : 0);
 }
 const inventaire = new Inventaire(rig, camera, listeMains);
 crochets.sortir = (main) => inventaire.sortir(main);
@@ -136,6 +147,37 @@ let personnages = [];
 creerPersonnages(carte.personnages)
   .then((p) => { personnages = p; message('Les habitants du complexe sont arrivés'); })
   .catch((err) => { console.error(err); message('Personnages indisponibles (connexion ?)'); });
+
+// --- Super-pouvoirs et panneau d'interface (inventaire, pouvoirs, options) ---
+const pouvoirs = new Pouvoirs({ joueur, mains, personnages: () => personnages });
+const catalogue = creerCatalogue(joueur);
+const interfaceVR = new Interface({ joueur, camera, rig, mains, inventaire, pouvoirs, catalogue, actions: {
+  message,
+  rotation: (mode) => { rotationFluide = mode === 'fluide'; },
+  qualite: choisirQualite,
+  replacer: () => toutReplacer(),
+  teleporter,
+} });
+
+// Destinations de téléportation (le sommet est le plus haut pic de la zone détaillée de la vallée)
+const sommet = { x: 0, y: 0, z: 0 };
+const VOISINS = [[16, 0], [-16, 0], [0, 16], [0, -16], [12, 12], [-12, 12], [12, -12], [-12, -12]];
+for (let x = -740; x <= 740; x += 8) for (let z = -940; z <= 540; z += 8) {
+  const y = hauteur(x, z);
+  if (y > sommet.y && VOISINS.every(([dx, dz]) => hauteur(x + dx, z + dz) <= y)) Object.assign(sommet, { x, y, z });
+}
+const DESTINATIONS = {
+  hall: { nom: 'Hall du complexe', pos: () => [carte.depart.x, 0, carte.depart.z] },
+  ponton: { nom: 'Ponton du lac', pos: () => [40, NIVEAU_LAC + 0.78, -240] },
+  village: { nom: 'Village', pos: () => [VILLAGE.x, hauteur(VILLAGE.x, VILLAGE.z - 6), VILLAGE.z - 6] },
+  sommet: { nom: `Sommet (${Math.round(sommet.y)} m)`, pos: () => [sommet.x, sommet.y + 0.3, sommet.z] },
+};
+function teleporter(id) {
+  for (const m of listeMains) m.lacher();
+  pouvoirs.lacherTout();
+  joueur.teleporter(...DESTINATIONS[id].pos());
+  message(DESTINATIONS[id].nom);
+}
 
 const grips = [], rayons = [];
 for (let i = 0; i < 2; i++) {
@@ -188,6 +230,7 @@ const mainsVides = () => ({ left: { serrage: 0, gachette: 0, pouce: 0 }, right: 
 function lireVR() {
   manettes.left = manettes.right = null;
   const e = { stick: { x: 0, y: 0 }, course: false, saut: false, reset: false, retour: false, modeRotation: false,
+    ouvrirInventaire: false, ouvrirPouvoirs: false, ouvrirOptions: false, basculer: false, clic: false,
     tourne: 0, accroupir: 0, mains: mainsVides(), poses: { left: null, right: null }, rayons: { left: null, right: null } };
   for (let i = 0; i < 2; i++) {
     const src = grips[i].userData.source;
@@ -204,13 +247,14 @@ function lireVR() {
     if (cote === 'left') {
       e.stick = { x: zoneMorte(x), y: zoneMorte(y) };
       e.course = !!b(3)?.pressed;
-      e.retour = !!b(4)?.pressed;
-      e.modeRotation = !!b(5)?.pressed;
+      e.ouvrirPouvoirs = !!b(4)?.pressed;     // X
+      e.ouvrirInventaire = !!b(5)?.pressed;   // Y
     } else {
       e.tourne = Math.abs(y) > 0.6 ? 0 : zoneMorte(x);
       e.accroupir = Math.abs(y) > 0.6 && Math.abs(x) < 0.5 ? Math.sign(y) : 0;
-      e.saut = !!b(4)?.pressed;
-      e.reset = !!b(5)?.pressed;
+      e.saut = !!b(4)?.pressed;               // A
+      e.basculer = !!b(5)?.pressed;           // B : pouvoir activé / coupé
+      e.clic = (b(0)?.value ?? 0) > 0.6;      // gâchette droite : cliquer sur le panneau
     }
   }
   return e;
@@ -254,11 +298,16 @@ function lirePC(dt) {
     reset: touches.has('KeyR'),
     retour: touches.has('KeyX'),
     modeRotation: false,
+    ouvrirInventaire: touches.has('KeyI'),
+    ouvrirPouvoirs: touches.has('KeyP'),
+    ouvrirOptions: touches.has('KeyO'),
+    basculer: touches.has('KeyB'),
+    clic: touches.has('KeyE') || souris.right > 0,
     tourne: 0,
     accroupir: t('KeyC') ? 1 : -1,
     mains: {
       right: { serrage: Math.max(souris.right, t('KeyF')), gachette: t('KeyE'), pouce: 0 },
-      left: { serrage: Math.max(souris.left, t('KeyG')), gachette: 0, pouce: 0 },
+      left: { serrage: Math.max(souris.left, t('KeyG')), gachette: t('KeyQ'), pouce: 0 },   // Q = touche A en AZERTY
     },
   };
 }
@@ -318,12 +367,33 @@ function majCibles(e, enVR, dt, mesurerVitesse) {
 
 function toutReplacer() {
   for (const m of listeMains) m.lacher();
+  pouvoirs.lacherTout();
   inventaire.vider();
+  catalogue.vider();   // les objets apparus depuis l'inventaire disparaissent
   for (const o of objets) replacer(o);
   message('Tous les objets sont revenus à leur place');
 }
 
-renderer.xr.addEventListener('sessionstart', () => { tangage = 0; document.exitPointerLock?.(); message('Bienvenue au Complexe Delta !', 4); });
+// Sous l'eau : brume verte et courte portée
+const BRUME_EAU = new THREE.Color(0x163f4a);
+const brumeAir = { couleur: new THREE.Color(), near: 0, far: 0, fond: null, ciel: false };
+let sousLEau = false;
+function majSousEau(t) {
+  const dessous = t.y < NIVEAU_LAC - 0.05 && dansLeLac(t.x, t.z);
+  if (dessous === sousLEau) return;
+  sousLEau = dessous;
+  if (dessous) {
+    Object.assign(brumeAir, { near: scene.fog.near, far: scene.fog.far, fond: scene.background, ciel: ciel.visible });
+    brumeAir.couleur.copy(scene.fog.color);
+    scene.fog.color.copy(BRUME_EAU); scene.fog.near = 0.3; scene.fog.far = 24;
+    scene.background = BRUME_EAU; ciel.visible = false;
+  } else {
+    scene.fog.color.copy(brumeAir.couleur); scene.fog.near = brumeAir.near; scene.fog.far = brumeAir.far;
+    scene.background = brumeAir.fond; ciel.visible = brumeAir.ciel;
+  }
+}
+
+renderer.xr.addEventListener('sessionstart', () => { tangage = 0; document.exitPointerLock?.(); message('Bienvenue ! Y : inventaire   X : super-pouvoirs', 5); });
 renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.65, 0); camera.quaternion.identity(); });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -334,7 +404,9 @@ addEventListener('resize', () => {
 // --- Boucle de jeu ---
 const horloge = new THREE.Clock();
 const evenements = new RAPIER.EventQueue(true);
-const avant = { saut: false, reset: false, retour: false, modeRotation: false, tourne: false };
+const avant = { saut: false, reset: false, retour: false, modeRotation: false, tourne: false,
+  ouvrirInventaire: false, ouvrirPouvoirs: false, ouvrirOptions: false, basculer: false, clic: false };
+const AUCUNE_GACHETTE = { left: 0, right: 0 };
 const escalade = new THREE.Vector3(), tmp = new THREE.Vector3(), tete = new THREE.Vector3();
 let rotationFluide = false, accroupi = 0;
 let images = 0, debutMesure = performance.now(), ips = 0, tempsJeu = 0;
@@ -353,8 +425,15 @@ function boucle(dtImpose) {
     rotationFluide = !rotationFluide;
     message(rotationFluide ? 'Rotation fluide' : 'Rotation par crans');
   }
-  if (e.retour && !avant.retour) { joueur.reapparaitre(); message('Retour au hall'); }
+  if (e.retour && !avant.retour) teleporter('hall');
   if (e.reset && !avant.reset) toutReplacer();
+  for (const [cle, onglet] of [['ouvrirInventaire', 'inventaire'], ['ouvrirPouvoirs', 'pouvoirs'], ['ouvrirOptions', 'options']]) {
+    if (e[cle] && !avant[cle]) { interfaceVR.basculer(onglet); if (interfaceVR.ouvert) pouvoirs.lacherTout(); }
+  }
+  if (e.basculer && !avant.basculer) { pouvoirs.basculer(); message(`Pouvoir : ${pouvoirs.nom()}`); }
+  // Panneau ouvert : la gâchette droite sert à cliquer, pas à utiliser un objet ni un pouvoir
+  const clicPanneau = interfaceVR.ouvert && e.clic && !avant.clic;
+  if (interfaceVR.ouvert) e.mains.right.gachette = 0;
   accroupi = THREE.MathUtils.clamp(accroupi + e.accroupir * 1.6 * dt, 0, 0.7);
 
   // Rotation (joystick droit)
@@ -370,12 +449,14 @@ function boucle(dtImpose) {
   for (const m of listeMains) {
     if (m.active && m.accroche) { escalade.add(tmp.copy(m.accroche).sub(m.cible.pos)); accrochees++; }
   }
+  const effet = pouvoirs.maj(dt, interfaceVR.ouvert ? AUCUNE_GACHETTE : { left: e.mains.left.gachette, right: e.mains.right.gachette });
   joueur.maj(dt, { stick: e.stick, course: e.course, saut: e.saut && !avant.saut, accroupi,
-    escalade: accrochees ? escalade.divideScalar(accrochees) : null });
+    escalade: accrochees ? escalade.divideScalar(accrochees) : null, ...effet });
 
   // Les mains visent la nouvelle position des manettes
   rig.updateMatrixWorld(true);
   majCibles(e, enVR, dt, false);
+  interfaceVR.maj(mains.right.rayon, clicPanneau);
   inventaire.maj(dt, enVR);
   for (const cote of ['left', 'right']) {
     const m = mains[cote];
@@ -387,7 +468,8 @@ function boucle(dtImpose) {
   piloterObjetsTenus(dt);
   joueur.teteMonde(tete);
   for (const p of personnages) p.maj(dt, tete);
-  Object.assign(avant, { saut: e.saut, reset: e.reset, retour: e.retour, modeRotation: e.modeRotation });
+  Object.assign(avant, { saut: e.saut, reset: e.reset, retour: e.retour, modeRotation: e.modeRotation, ouvrirInventaire: e.ouvrirInventaire,
+    ouvrirPouvoirs: e.ouvrirPouvoirs, ouvrirOptions: e.ouvrirOptions, basculer: e.basculer, clic: e.clic });
 
   // Physique
   // Flottaison dans le lac (objets et corps tombés)
@@ -439,6 +521,9 @@ function boucle(dtImpose) {
   soleil.target.updateMatrixWorld();
   ciel.position.copy(tete);
   majMessage(dt);
+  majEffets(dt);
+  majSousEau(tete);
+  if (images % 6 === 0) masquerLointains(tete);
   animerEau(tempsJeu);
   renderer.render(scene, camera);
   majAuditeur(camera);
@@ -459,7 +544,7 @@ renderer.setAnimationLoop(() => boucle());
 document.getElementById('chargement')?.remove();
 // Outils de test depuis la console : jeu.simuler(72) fait avancer le jeu d'une seconde
 window.jeu = {
-  world, joueur, mains, objets, renderer, scene, rig, camera, inventaire, message,
+  world, joueur, mains, objets, renderer, scene, rig, camera, inventaire, message, pouvoirs, interface: interfaceVR, catalogue, teleporter, sommet,
   get personnages() { return personnages; },
   get ips() { return ips; },
   simuler: (n, dt = 1 / 72) => { for (let i = 0; i < n; i++) boucle(dt); },

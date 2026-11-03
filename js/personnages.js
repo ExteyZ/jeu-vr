@@ -430,6 +430,7 @@ class Personnage {
         .setContactForceEventThreshold(masse * GRAVITE * 4), corps);
       const partie = {
         def, os, corps, colliders: [collider], masse, volume, son: 'chair', ragdoll: true, pnj: this, nom: this.def.nom,
+        inertie: def.tete ? 0.4 * masse * def.rayon ** 2 : masse * (longueur ** 2 / 12 + def.rayon ** 2 / 4),
         qDecalage: qOs.clone(),                                         // corps créé sans rotation
         pDecalage: def.os === 'hanches' ? pOs.clone().sub(centre) : null,
       };
@@ -466,6 +467,9 @@ class Personnage {
       parNom.torse.corps.applyImpulse(impulsion, true);
       parNom.bassin.corps.applyImpulse(impulsion.clone().multiplyScalar(0.5), true);
     }
+    for (const p of this.parties) p.parentPartie = parNom[p.def.parent] ?? null;
+    // Tonus musculaire : fort au début de la chute (le corps se raidit), puis il se relâche
+    this.muscle = raison === 'attrape' ? 0.45 : 1;
     this.mixer.stopAllAction();
     this.dire(raison === 'attrape' ? 'attrape' : 'chute', true);
   }
@@ -482,12 +486,36 @@ class Personnage {
   }
 
   majRagdoll(dt) {
+    if (!this.parties) { this.etat = 'marche'; this.collider.setEnabled(true); return; }   // chute interrompue par une erreur
     this.tempsRagdoll += dt;
     const tenu = this.parties.some((p) => corpsTenus.has(p.corps.handle));
     const v = this.parties[0].corps.linvel();
     if (tenu || Math.hypot(v.x, v.y, v.z) > 0.35) this.calme = 0;
     else this.calme += dt;
+    this.muscle = Math.max(tenu ? 0.25 : 0.12, this.muscle - dt * 0.45);
+    this.muscler(dt);
     if (!tenu && ((this.calme > 1.5 && this.tempsRagdoll > 2.5) || this.tempsRagdoll > 25)) this.relever();
+  }
+
+  // Muscles : chaque membre est ramené vers la posture qu'il avait au moment de la chute (tous les corps ont été
+  // créés avec la même orientation, donc la posture de départ = rotation relative nulle), par un ressort amorti.
+  muscler(dt) {
+    const w = 14 * this.muscle;   // pulsation du ressort (rad/s)
+    for (const p of this.parties) {
+      const pp = p.parentPartie;
+      if (!pp) continue;
+      const rp = pp.corps.rotation(), rc = p.corps.rotation();
+      const qErr = qA.set(rp.x, rp.y, rp.z, rp.w).multiply(qB.set(rc.x, rc.y, rc.z, rc.w).invert());
+      if (qErr.w < 0) qErr.set(-qErr.x, -qErr.y, -qErr.z, -qErr.w);
+      const s = Math.hypot(qErr.x, qErr.y, qErr.z);
+      const angle = Math.min(1, 2 * Math.atan2(s, qErr.w));
+      const ecart = s > 1e-6 ? vA.set(qErr.x, qErr.y, qErr.z).multiplyScalar(angle / s) : vA.set(0, 0, 0);
+      const wc = p.corps.angvel(), wp = pp.corps.angvel();
+      const inertie = (p.inertie * pp.inertie) / (p.inertie + pp.inertie);
+      const imp = ecart.multiplyScalar(w * w).addScaledVector(vB.set(wc.x - wp.x, wc.y - wp.y, wc.z - wp.z), -2 * w).multiplyScalar(inertie * dt);
+      p.corps.applyTorqueImpulse(imp, true);
+      pp.corps.applyTorqueImpulse({ x: -imp.x, y: -imp.y, z: -imp.z }, true);
+    }
   }
 
   relever() {

@@ -188,8 +188,24 @@ export function distanceSurface(collider, p) {
   return Math.hypot(proj.point.x - p.x, proj.point.y - p.y, proj.point.z - p.z);
 }
 
+// Détails lointains : les modèles très fins (des milliers de triangles) sont cachés quand on en est loin
+let details = [];
+// filtre : choisit les pièces à cacher (sinon : toutes celles de plus de 1500 triangles)
+export function enregistrerDetails(modele, taille, filtre = null, portee = Math.max(30, taille * 25)) {
+  modele.traverse((m) => {
+    if (!m.isMesh || m.isSkinnedMesh) return;
+    const g = m.geometry, triangles = (g.index ? g.index.count : g.attributes.position.count) / 3;
+    if (filtre ? filtre(m) : triangles > 1500) details.push({ mesh: m, portee2: portee * portee });
+  });
+}
+const pDetail = new THREE.Vector3();
+export function masquerLointains(oeil) {
+  for (const d of details) d.mesh.visible = pDetail.setFromMatrixPosition(d.mesh.matrixWorld).distanceToSquared(oeil) < d.portee2;
+}
+
 // Retire complètement un objet mobile du monde (objets créés depuis l'inventaire)
 export function supprimerObjet(o) {
+  details = details.filter((d) => { for (let p = d.mesh; p; p = p.parent) if (p === o.groupe) return false; return true; });
   for (const c of o.colliders) infos.delete(c.handle);
   world.removeRigidBody(o.corps);
   scene.remove(o.groupe);

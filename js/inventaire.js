@@ -127,5 +127,44 @@ export class Inventaire {
     for (const e of this.emplacements) {
       if (e.objet) { e.objet.range = null; e.objet = null; }
     }
+    for (let i = 0; i < this.sac.length; i++) {
+      if (this.sac[i]) { this.sac[i].range = null; this.sac[i].groupe.visible = true; this.sac[i] = null; }
+    }
+  }
+
+  // --- Sac à dos (12 places), utilisé depuis l'interface ---
+  get sac() { return (this._sac ??= new Array(12).fill(null)); }
+
+  rangerDansSac(main) {
+    const objet = main.objetTenu;
+    if (!objet || objet.ragdoll || objet.masse > 40 || objet.tailleMax > 2.5) return false;
+    const i = this.sac.indexOf(null);
+    if (i < 0) return false;
+    main.lacher();
+    this.sac[i] = objet;
+    objet.range = { nom: 'sac' };
+    objet.corps.setEnabled(false);
+    objet.groupe.visible = false;
+    jouerSon('rangement', main.cible.pos, 0.7);
+    return true;
+  }
+
+  sortirDuSac(i, main) {
+    const objet = this.sac[i];
+    if (!objet) return null;
+    this.sac[i] = null;
+    objet.range = null;
+    objet.groupe.visible = true;
+    // L'objet apparaît dans la main (ou juste devant si elle est déjà prise)
+    const p = main.poing(new THREE.Vector3());
+    if (main.tenu) p.addScaledVector(main.rayon.dir, 0.5);
+    objet.corps.setTranslation(p, true);
+    objet.corps.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    objet.corps.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    objet.corps.setEnabled(true);
+    objet.groupe.position.copy(p);
+    if (!main.tenu && main.active) main.saisir(objet.corps, objet);
+    jouerSon('rangement', p, 0.5);
+    return objet;
   }
 }

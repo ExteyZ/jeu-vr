@@ -8,7 +8,7 @@
 //        └────────── HALL ──────────┘   <- départ
 //                 sud (+z)
 import * as THREE from 'three';
-import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer, CG_MARCHES, CG_RAMPE } from './monde.js';
+import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer, CG_MARCHES, CG_RAMPE, enregistrerDetails } from './monde.js';
 import { creerMateriaux, texturePanneau, textureEnseigne } from './materiaux.js';
 import { jouerSon } from './sons.js';
 import { ressources, copieModele } from './ressources.js';
@@ -98,6 +98,7 @@ function objetModele(id, pos, { masse = 0, rot = [0, 0, 0], forme = 'boite', son
   const o = creerObjet({ pos, rot, masse, son, nom, formes, fusion: false, friction, rebond, amortissement });
   if (!ombre) modele.traverse((m) => { if (m.isMesh) m.castShadow = false; });
   o.groupe.add(modele);
+  enregistrerDetails(modele, Math.max(t.x, t.y, t.z));
   o.dimensions = t.clone();
   if (masse > 0) {
     const b = new THREE.Box3().setFromObject(o.groupe);
@@ -119,7 +120,9 @@ function voiture(x, z, rotY) {
   for (const n of ['rim_fl', 'rim_fr', 'rim_rr', 'rim_rl', 'trim']) { const o = modele.getObjectByName(n); if (o) o.material = details; }
   const verre = modele.getObjectByName('glass');
   if (verre) verre.material = vitre;
-  modele.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // L'habitacle (des centaines de milliers de triangles) ne fait pas d'ombre et n'est affiché que de près
+  const habitacle = (m) => /leather|interior|plastic|carbon|steering|carpet|nuts|^brake(_\d)?$|^metal$|leds|wipers/.test(m.name);
+  modele.traverse((o) => { if (o.isMesh) { o.castShadow = !habitacle(o); o.receiveShadow = true; } });
   modele.updateMatrixWorld(true);
   let boite = new THREE.Box3().setFromObject(modele);
   const t0 = boite.getSize(new THREE.Vector3());
@@ -131,6 +134,7 @@ function voiture(x, z, rotY) {
   const o = creerObjet({ pos: [x, 0, z], rot: [0, rotY, 0], fusion: false, son: 'metal',
     formes: [{ type: 'boite', taille: [t.x, t.y * 0.85, t.z], pos: [c.x, t.y * 0.425, c.z], cache: true }] });
   o.groupe.add(modele);
+  enregistrerDetails(modele, 0, habitacle, 9);
   return true;
 }
 
@@ -420,11 +424,11 @@ function construireHall() {
 
   panneau(texturePanneau('Commandes', [
     'Gâchette du majeur : attraper / grimper',
-    'Gâchette de l\'index : utiliser l\'objet tenu',
-    'Joystick gauche : marcher (clic = courir)',
+    'Gâchette de l\'index : utiliser l\'objet / le pouvoir',
+    'Joystick gauche : marcher, nager (clic = courir)',
     'Joystick droit : tourner / bas = s\'accroupir',
-    'A : sauter   B : tout remettre en place',
-    'Y : rotation fluide ou par crans   X : revenir ici',
+    'A : sauter   B : pouvoir activé / coupé',
+    'Y : inventaire et objets   X : super-pouvoirs',
     'Lâche un objet sur ta hanche ou ton épaule = rangé',
     'Main serrée vers un objet + coup de poignet = attiré',
   ]), [-7.82, 2.3, 14.5], Math.PI / 2, 2.6, 1.3);

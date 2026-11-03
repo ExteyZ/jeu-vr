@@ -11,8 +11,8 @@ import { RAPIER, world, scene, infos, vibrer, CG_MAIN, CG_TENU, CG_MONDE, GRAVIT
 
 const MASSE_MAIN = 0.6;                 // kg
 const INERTIE_MAIN = 0.002;
-const FORCE_MAX = 350;                  // N par main : au-delà, l'objet est trop lourd pour suivre
-const COUPLE_MAX = 25;                  // N·m par main
+let FORCE_MAX = 350;                    // N par main : au-delà, l'objet est trop lourd pour suivre
+let COUPLE_MAX = 25;                    // N·m par main
 const VITESSE_MAX = 20;                 // m/s
 const ROTATION_MAX = 40;                // rad/s
 const DISTANCE_LACHER = 0.45;           // si la main tenue est trop loin de la manette, on lâche
@@ -521,4 +521,10 @@ class ModeleMain {
     }
     return res;
   }
+}
+
+// Super-force : multiplie la force des mains (1 = force normale)
+export function reglerForce(multiplicateur) {
+  FORCE_MAX = 350 * multiplicateur;
+  COUPLE_MAX = 25 * multiplicateur;
 }
