@@ -1,6 +1,6 @@
 // Le village suisse au bord du lac (chalets), le ponton avec sa barque, et le panneau de la sortie du complexe.
 import * as THREE from 'three';
-import { scene, creerObjet, ajouterDecor } from './monde.js';
+import { scene, creerObjet, ajouterDecor, fusionnerDecor } from './monde.js';
 import { hauteur, VILLAGE, NIVEAU_LAC, LAC, aleatoire } from './terrain.js';
 import { textureEnseigne } from './materiaux.js';
 import { ressources } from './ressources.js';
@@ -28,14 +28,7 @@ export function construireVillage() {
   };
 
   // Chalets disposés en arc, façade tournée vers le lac
-  for (let i = 0; i < 8; i++) {
-    const a = -1.0 + i * 0.32;
-    const x = VILLAGE.x + Math.cos(a) * (40 + (i % 2) * 22), z = VILLAGE.z + Math.sin(a) * (40 + (i % 2) * 22);
-    const vers = new THREE.Vector2(LAC.cx - x, LAC.cz - z).normalize();
-    chalet(x, z, Math.atan2(vers.x, vers.y) + (aleatoire(i) - 0.5) * 0.3, {
-      l: 8 + aleatoire(i + 3) * 3, p: 7 + aleatoire(i + 5) * 2, volets: M.volets[i % 3],
-    });
-  }
+  positionsChalets().forEach(({ x, z, rot, l, p }, i) => chalet(x, z, rot, { l, p, volets: M.volets[i % 3] }));
   // Fontaine de village et bancs
   const yv = hauteur(VILLAGE.x, VILLAGE.z);
   creerObjet({ pos: [VILLAGE.x, yv, VILLAGE.z], son: 'pierre', formes: [
@@ -48,6 +41,44 @@ export function construireVillage() {
 
   ponton();
   panneauSortie();
+  fusionnerDecor();   // assemble les chalets, la fontaine et le ponton (sinon ils resteraient invisibles)
+}
+
+// Emplacement des chalets (aussi utilisé pour ne pas faire pousser d'herbe dedans)
+export function positionsChalets() {
+  return Array.from({ length: 8 }, (_, i) => {
+    const a = -1.0 + i * 0.32;
+    const x = VILLAGE.x + Math.cos(a) * (40 + (i % 2) * 22), z = VILLAGE.z + Math.sin(a) * (40 + (i % 2) * 22);
+    const vers = new THREE.Vector2(LAC.cx - x, LAC.cz - z).normalize();
+    return { x, z, rot: Math.atan2(vers.x, vers.y) + (aleatoire(i) - 0.5) * 0.3, l: 8 + aleatoire(i + 3) * 3, p: 7 + aleatoire(i + 5) * 2 };
+  });
+}
+
+// Coque de barque en bois : effilée à la proue, tableau arrière, fond qui remonte aux extrémités
+function coqueBarque(L, B, D) {
+  const NS = 24, NT = 14, pos = [], uv = [], idx = [];
+  const lisse = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i <= NS; i++) {
+    const s = -1 + (2 * i) / NS;   // -1 = arrière, +1 = proue
+    const demi = (B / 2) * (1 - lisse(0.25, 1, s) * 0.97) * (1 - lisse(-0.55, -1, s) * 0.45);
+    const tonture = 0.1 * Math.pow(Math.max(0, s), 2) + 0.04 * Math.pow(Math.max(0, -s), 2);   // le bord remonte aux bouts
+    const quille = 0.12 * Math.pow(Math.abs(s), 3.5);                                       // le fond remonte aux bouts
+    for (let k = 0; k <= NT; k++) {
+      const t = -1 + (2 * k) / NT, a = (t * Math.PI) / 2;
+      pos.push(Math.sin(a) * demi, -(D - quille) * Math.pow(Math.cos(a), 1.3) + tonture + D / 2, (s * L) / 2);
+      uv.push(t * 1.5, s * 2.2);
+    }
+  }
+  for (let i = 0; i < NS; i++) for (let k = 0; k < NT; k++) {
+    const a = i * (NT + 1) + k, b = a + NT + 1;
+    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 // Un chalet suisse : socle en pierre, étage en bois, toit à deux pans, balcon, fenêtres à volets et géraniums
@@ -125,13 +156,30 @@ function ponton() {
   }
   for (const s of [1, -1]) creerObjet({ pos: [x + s * 1.2, y + 0.45, z1 + 0.3], formes: [C(0.12, 0.9, M.boisSombre)] });
   // Barque (coque creuse) : elle flotte grâce à l'eau qu'elle déplace
+  // (formes de collision invisibles : la vraie coque est un modèle courbe posé par-dessus)
   const barque = creerObjet({ pos: [x + 2.6, NIVEAU_LAC + 0.25, z1 + 6], masse: 70, son: 'bois', nom: 'barque', amortissement: 0.3, formes: [
-    B([1.3, 0.06, 3.6], M.boisSombre, { pos: [0, -0.2, 0] }),
-    B([0.06, 0.45, 3.6], M.planches, { pos: [0.65, 0, 0] }), B([0.06, 0.45, 3.6], M.planches, { pos: [-0.65, 0, 0] }),
-    B([1.3, 0.45, 0.06], M.planches, { pos: [0, 0, 1.8] }), B([1.3, 0.45, 0.06], M.planches, { pos: [0, 0, -1.8] }),
-    B([1.24, 0.05, 0.3], M.planches, { pos: [0, 0.05, 0.3] }),
+    B([1.0, 0.06, 3.2], M.boisSombre, { pos: [0, -0.2, 0], cache: true }),
+    B([0.06, 0.4, 3.0], M.planches, { pos: [0.6, 0.02, -0.1], cache: true }), B([0.06, 0.4, 3.0], M.planches, { pos: [-0.6, 0.02, -0.1], cache: true }),
+    B([0.5, 0.4, 0.06], M.planches, { pos: [0, 0.02, 1.7], cache: true }), B([1.0, 0.4, 0.06], M.planches, { pos: [0, 0.02, -1.75], cache: true }),
   ] });
+  const coque = new THREE.Mesh(coqueBarque(3.6, 1.3, 0.5), (() => { const m = M.planches.clone(); m.side = THREE.DoubleSide; return m; })());
+  coque.castShadow = coque.receiveShadow = true;
+  const details = [
+    // Plat-bord, bancs, tableau arrière et deux rames posées dans la barque
+    [new THREE.BoxGeometry(1.16, 0.05, 0.28), M.boisSombre, [0, 0.0, 0.35], [0, 0, 0]],
+    [new THREE.BoxGeometry(0.96, 0.05, 0.3), M.boisSombre, [0, 0.0, -1.05], [0, 0, 0]],
+    [new THREE.BoxGeometry(0.82, 0.42, 0.05), M.boisSombre, [0, 0.0, -1.79], [0, 0, 0]],
+    [new THREE.CylinderGeometry(0.025, 0.025, 2.3, 8), M.boisSombre, [0.32, 0.08, 0.1], [Math.PI / 2, 0, 0.06]],
+    [new THREE.BoxGeometry(0.16, 0.015, 0.5), M.planches, [0.38, 0.08, -1.0], [0, 0.06, 0]],
+    [new THREE.CylinderGeometry(0.025, 0.025, 2.3, 8), M.boisSombre, [-0.32, 0.08, 0.1], [Math.PI / 2, 0, -0.06]],
+    [new THREE.BoxGeometry(0.16, 0.015, 0.5), M.planches, [-0.38, 0.08, -1.0], [0, -0.06, 0]],
+  ].map(([g, m, p, r]) => { const o = new THREE.Mesh(g, m); o.position.set(...p); o.rotation.set(...r); o.castShadow = true; return o; });
+  const bord = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(
+    [[-0.41, -1.8], [-0.62, -0.9], [-0.66, 0.2], [-0.46, 1.2], [0, 1.82], [0.46, 1.2], [0.66, 0.2], [0.62, -0.9], [0.41, -1.8]]
+      .map(([bx, bz]) => new THREE.Vector3(bx, 0.26 + 0.1 * Math.pow(Math.max(0, bz / 1.8), 2), bz))), 40, 0.03, 6), M.boisSombre);
+  barque.groupe.add(coque, bord, ...details);
   barque.volume = 1.6;
+  barque.demiHauteur = 0.15;   // du centre de gravité (bas) au fond de la coque : elle s'enfonce de quelques centimètres
   barque.tailleMax = 99;   // trop grande pour l'inventaire
 }
 

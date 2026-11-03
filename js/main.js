@@ -1,7 +1,7 @@
 // Point d'entrée : rendu, contrôles (VR et PC) et boucle de jeu.
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { RAPIER, world, scene, objets, infos, manettes, vibrer, synchroniserObjets, replacer, masquerLointains } from './monde.js';
+import { RAPIER, world, scene, objets, infos, manettes, vibrer, synchroniserObjets, replacer, masquerLointains, majSolides } from './monde.js';
 import { MainPhysique, crochets, piloterObjetsTenus } from './mains.js';
 import { Joueur } from './joueur.js';
 import { Inventaire } from './inventaire.js';
@@ -10,18 +10,23 @@ import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
 import { construireTerrain, hauteur, NIVEAU_LAC, VILLAGE } from './terrain.js';
-import { construireEau, animerEau, flotter, dansLeLac } from './eau.js';
+import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, horsReflet } from './eau.js';
 import { construireVillage } from './village.js';
 import { Pouvoirs } from './pouvoirs.js';
 import { Interface } from './interface.js';
 import { majEffets } from './effets.js';
 import { creerCatalogue } from './catalogue.js';
+import { PROFIL, ULTRA } from './profil.js';
+import { construireForet, majForet } from './arbres.js';
+import { construireHerbe, majHerbe } from './herbe.js';
+import { construireSousBois, majSousBois } from './sousbois.js';
 
 // --- Rendu ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+if (ULTRA) renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // ombres aux bords doux (carte graphique du PC)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;   // rendu "photo" : hautes lumières douces
 renderer.toneMappingExposure = 0.9;
 renderer.xr.enabled = true;
@@ -31,7 +36,7 @@ document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
 const HORIZON = 0xc9dcee;
-scene.fog = new THREE.Fog(HORIZON, 180, 5200);   // brume légère : les montagnes lointaines bleuissent
+scene.fog = new THREE.Fog(HORIZON, ULTRA ? 110 : 180, ULTRA ? 3600 : 5200);   // brume : les montagnes lointaines bleuissent
 scene.background = new THREE.Color(HORIZON);
 const toileCiel = document.createElement('canvas');
 toileCiel.width = 4; toileCiel.height = 256;
@@ -54,7 +59,7 @@ const ambiance = new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15);
 if (ressources.environnement) {
   scene.environment = ressources.environnement;   // reflets et lumière ambiante venant du vrai ciel
   scene.background = ressources.ciel;
-  scene.fog.color.set(0xc3d0dc);
+  scene.fog.color.set(ULTRA ? 0xb6c6d6 : 0xc3d0dc);
   ciel.visible = false;
   ambiance.intensity = 0.35;
 }
@@ -67,11 +72,26 @@ lampeEntrepot.position.set(-23, 6.4, 0);
 scene.add(lampeHall, lampeEntrepot);
 const soleil = new THREE.DirectionalLight(0xfff3e0, 2.8);
 soleil.castShadow = true;
-soleil.shadow.mapSize.set(1024, 1024);
-Object.assign(soleil.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 });
+const OMBRE = PROFIL.ombre;
+soleil.shadow.mapSize.setScalar(OMBRE.taille);
+Object.assign(soleil.shadow.camera, { left: -OMBRE.portee, right: OMBRE.portee, top: OMBRE.portee, bottom: -OMBRE.portee, near: 1, far: 260 });
 soleil.shadow.camera.updateProjectionMatrix();
-soleil.shadow.normalBias = 0.04;
+soleil.shadow.normalBias = ULTRA ? 0.03 : 0.04;
+if (ULTRA) soleil.shadow.radius = 2;
 scene.add(soleil, soleil.target);
+// Direction du soleil (vers le soleil), et repère de la "caméra d'ombre" pour l'aligner sur ses pixels (pas de scintillement)
+const DIR_SOLEIL = new THREE.Vector3(0.42, 0.72, 0.55).normalize();
+const axeDroite = new THREE.Vector3().crossVectors(DIR_SOLEIL, new THREE.Vector3(0, 1, 0)).normalize();
+const axeHaut = new THREE.Vector3().crossVectors(axeDroite, DIR_SOLEIL).normalize();
+const centreOmbre = new THREE.Vector3();
+function placerSoleil(pos) {
+  const texel = (2 * soleil.shadow.camera.right) / soleil.shadow.mapSize.x;
+  const a = Math.round(pos.dot(axeDroite) / texel) * texel, b = Math.round(pos.dot(axeHaut) / texel) * texel, c = pos.dot(DIR_SOLEIL);
+  centreOmbre.copy(axeDroite).multiplyScalar(a).addScaledVector(axeHaut, b).addScaledVector(DIR_SOLEIL, c);
+  soleil.target.position.copy(centreOmbre);
+  soleil.position.copy(centreOmbre).addScaledVector(DIR_SOLEIL, 120);
+  soleil.target.updateMatrixWorld();
+}
 
 // --- Joueur : le "rig" contient la caméra (la tête) et les manettes ---
 const rig = new THREE.Group();
@@ -82,10 +102,21 @@ rig.add(camera);
 
 // La vallée suisse (relief, forêts, lac), puis le complexe et le village
 const P = ressources.materiaux;
-const blanc = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
-blanc.needsUpdate = true;
-construireTerrain({ herbe: P.herbe?.map ?? blanc, roche: P.roche?.map ?? blanc, sable: P.sable?.map ?? blanc });
+const SOLS = { herbe: 0x5d7a3a, solVert: 0x5f6b3c, foret: 0x5a4632, mousse: 0x5d6a45, roche: 0x8a8580, neige: 0xf2f4f8, galets: 0x8c8478 };
+const sols = {};
+for (const [nom, couleur] of Object.entries(SOLS)) {
+  if (P[nom]?.map) { sols[nom] = P[nom]; continue; }
+  const t = new THREE.DataTexture(new Uint8Array([...new THREE.Color(couleur).toArray().map((v) => v * 255), 255]), 1, 1);
+  t.needsUpdate = true;
+  sols[nom] = { map: t, normalMap: null };   // couleur unie si la photo n'a pas pu être chargée
+}
+construireTerrain(sols);
 construireEau(ressources.normalesEau);
+if (ecranChargement) ecranChargement.textContent = 'Plantation de la forêt…';
+await new Promise((ok) => setTimeout(ok, 30));
+construireForet(renderer);
+construireHerbe();
+await construireSousBois().catch((e) => console.warn('Sous-bois indisponible', e));
 const carte = construireCarte();
 construireVillage();
 const joueur = new Joueur(rig, camera, carte.depart);
@@ -120,7 +151,7 @@ function appliquerQualite(niveau) {
   const ombresAvant = renderer.shadowMap.enabled;
   qualite = niveau;
   lampeHall.visible = lampeEntrepot.visible = niveau === 0;
-  soleil.shadow.mapSize.setScalar(niveau === 0 ? 1024 : 512);
+  soleil.shadow.mapSize.setScalar(niveau === 0 ? OMBRE.taille : OMBRE.taille / 2);
   soleil.shadow.map?.dispose();
   soleil.shadow.map = null;
   renderer.shadowMap.enabled = niveau < 2;
@@ -516,8 +547,11 @@ function boucle(dtImpose) {
   for (const p of personnages) p.majVisuel(dt, tete);
   for (const a of carte.animations) a();
   joueur.pieds(tmp);
-  soleil.position.set(Math.round(tmp.x) + 8, 22, Math.round(tmp.z) + 12);
-  soleil.target.position.set(Math.round(tmp.x), 0, Math.round(tmp.z));
+  placerSoleil(tmp);
+  majForet(tete, tempsJeu);
+  majHerbe(tempsJeu, tete, tmp);
+  if (images % 4 === 0) majSousBois(tete);
+  if (images % 4 === 2) majSolides(tmp);
   soleil.target.updateMatrixWorld();
   ciel.position.copy(tete);
   majMessage(dt);
@@ -539,6 +573,20 @@ function boucle(dtImpose) {
     qualiteAuto(enVR);
   }
 }
+// Avant de commencer : on envoie toutes les textures à la carte graphique et on prépare tous les matériaux,
+// sinon le jeu se figerait une fraction de seconde la première fois qu'on regarde quelque chose de nouveau
+if (ecranChargement) ecranChargement.textContent = 'Préparation des graphismes…';
+await new Promise((ok) => setTimeout(ok, 30));
+for (const m of listeMains) horsReflet.add(m.visuel.groupe);
+capturerReflets(renderer);
+const texturesVues = new Set();
+scene.traverse((o) => {
+  for (const m of [o.material, o.customDepthMaterial].flat()) {
+    if (!m) continue;
+    for (const v of Object.values(m)) if (v?.isTexture && !texturesVues.has(v)) { texturesVues.add(v); renderer.initTexture(v); }
+  }
+});
+try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn(e); }
 renderer.setAnimationLoop(() => boucle());
 
 document.getElementById('chargement')?.remove();

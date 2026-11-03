@@ -13,6 +13,22 @@ Adresse : **exteyz.github.io**
   qui se raidissent puis se relâchent.
 - Sons d'impact selon la matière, en 3D.
 
+## Graphismes : deux modes
+
+Le jeu choisit tout seul :
+
+- **Ultra** quand la page est ouverte sur un PC (casque branché par Quest Link ou Air Link) : c'est la carte graphique
+  du PC qui dessine. Vrais sapins en 3D (rameaux et écorce photo), herbe dense jusqu'à 80 m, fougères, rochers moussus,
+  troncs morts, relief fin avec sept sols photo en 2K et leur relief, ombres douces sur 45 m, ciel photo 4K,
+  lac qui reflète la vallée. Premier lancement : environ 350 Mo à télécharger (ensuite gardés par le navigateur).
+- **Quest** quand la page est ouverte dans le navigateur du casque seul : même monde, plus léger.
+
+On peut forcer un mode avec l'adresse : `?qualite=ultra` ou `?qualite=quest`.
+
+**Jouer en Ultra** : fermer les autres jeux, brancher le casque au PC et lancer Quest Link (dans l'application Meta
+Quest Link du PC, Réglages → Général → « OpenXR Runtime » doit être réglé sur Meta Quest Link), ouvrir
+exteyz.github.io dans Chrome ou Edge sur le PC, puis appuyer sur « ENTER VR ».
+
 ## Commandes (manettes Quest)
 
 | Commande | Action |
@@ -41,7 +57,9 @@ et téléportation (hall, ponton, village, sommet).
 - `js/interface.js` : panneau VR (inventaire, pouvoirs, options) avec pointeur laser
 - `js/catalogue.js` : objets qu'on fait apparaître depuis l'inventaire
 - `js/pouvoirs.js` : super-pouvoirs ; `js/effets.js` : particules, lueurs, rayons
-- `js/terrain.js` : relief de la vallée, forêts, rochers ; `js/eau.js` : lac et flottaison ; `js/village.js` : chalets et ponton
+- `js/profil.js` : choix du mode graphique (Ultra sur PC, Quest dans le casque seul)
+- `js/terrain.js` : relief de la vallée et ses sols ; `js/eau.js` : lac, reflets et flottaison ; `js/village.js` : chalets, ponton et barque
+- `js/arbres.js` : sapins réalistes et leurs imposteurs ; `js/herbe.js` : herbe ; `js/sousbois.js` : plantes, rochers et bois morts
 - `js/personnages.js` : habitants (animations, dialogues, réactions, chute physique)
 - `js/sons.js` : sons d'impact et voix
 - `js/carte.js` : le Complexe Delta et tous ses objets
@@ -52,7 +70,9 @@ et téléportation (hall, ponton, village, sommet).
 ## Ressources et crédits
 
 - Moteur 3D : [three.js](https://threejs.org) (MIT) ; physique : [Rapier](https://rapier.rs) (Apache 2.0)
-- Ciel photo, matériaux et objets 3D : [Poly Haven](https://polyhaven.com) (CC0)
+- Ciel photo, matériaux et objets 3D : [Poly Haven](https://polyhaven.com) (CC0), dont les rameaux du modèle `fir_tree_01`
+  (sapins), les plantes, rochers et bois morts de la vallée
+- Allègement des modèles au chargement : [meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT)
 - Mains : modèle « generic-hand » de [WebXR Input Profiles](https://github.com/immersive-web/webxr-input-profiles) (MIT)
 - Voiture : modèle Ferrari des exemples three.js
 - Personnages : [Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) (MIT) ; modèles et animations chargés

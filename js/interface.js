@@ -4,6 +4,7 @@ import { scene } from './monde.js';
 import { LISTE_POUVOIRS } from './pouvoirs.js';
 import { jouerSon } from './sons.js';
 import { LUEUR } from './effets.js';
+import { PROFIL, ULTRA } from './profil.js';
 
 const L = 1024, H = 640;                 // taille de l'image du panneau (pixels)
 const LARG = 0.9, HAUT = (LARG * H) / L; // taille du panneau (mètres)
@@ -200,5 +201,7 @@ export class Interface {
     });
     g.fillStyle = '#b8c4d2'; g.font = '20px sans-serif'; g.textAlign = 'left';
     ['Y : inventaire   X : pouvoirs   B : pouvoir on/off', 'A : sauter   joystick droit bas : s\'accroupir', 'Gâchette du majeur : attraper   index : utiliser / pouvoir'].forEach((l, i) => g.fillText(l, 30, 430 + i * 34));
+    g.fillStyle = ULTRA ? '#5be37d' : '#f2b134';
+    g.fillText(ULTRA ? `Graphismes : ${PROFIL.nom} (carte graphique du PC)` : `Graphismes : ${PROFIL.nom} — pour le mode Ultra, joue par le PC (Quest Link)`, 30, 545, L - 60);
   }
 }

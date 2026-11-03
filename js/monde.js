@@ -203,6 +203,45 @@ export function masquerLointains(oeil) {
   for (const d of details) d.mesh.visible = pDetail.setFromMatrixPosition(d.mesh.matrixWorld).distanceToSquared(oeil) < d.portee2;
 }
 
+// Solides du décor naturel (troncs, rochers, souches) : des milliers, mais seuls ceux proches du joueur existent
+// dans le moteur physique (sinon le calcul ralentit) ; ils sont créés et retirés pendant qu'on se déplace.
+const CASE_SOLIDES = 32, PORTEE_SOLIDES = 56;
+const solidesLointains = new Map(), solidesActifs = new Set();
+let dernierCentre = null;
+// position = { x, y, z } ; rotation = quaternion ou null ; forme = ColliderDesc (créé à la demande)
+export function ajouterSolideLointain(position, rotation, forme, son) {
+  const k = `${Math.floor(position.x / CASE_SOLIDES)},${Math.floor(position.z / CASE_SOLIDES)}`;
+  if (!solidesLointains.has(k)) solidesLointains.set(k, []);
+  solidesLointains.get(k).push({ position, rotation, forme, son, corps: null });
+}
+export function majSolides(pos, force = false) {
+  if (!force && dernierCentre && Math.hypot(pos.x - dernierCentre.x, pos.z - dernierCentre.z) < 8) return;
+  dernierCentre = { x: pos.x, z: pos.z };
+  const r = Math.ceil(PORTEE_SOLIDES / CASE_SOLIDES), cx = Math.floor(pos.x / CASE_SOLIDES), cz = Math.floor(pos.z / CASE_SOLIDES);
+  const voulus = new Set();
+  for (let i = -r; i <= r; i++) for (let k = -r; k <= r; k++) {
+    for (const s of solidesLointains.get(`${cx + i},${cz + k}`) ?? []) {
+      if (Math.hypot(s.position.x - pos.x, s.position.z - pos.z) < PORTEE_SOLIDES) voulus.add(s);
+    }
+  }
+  for (const s of solidesActifs) {
+    if (voulus.has(s)) continue;
+    infos.delete(s.collider.handle);
+    world.removeRigidBody(s.corps);
+    s.corps = s.collider = null;
+    solidesActifs.delete(s);
+  }
+  for (const s of voulus) {
+    if (s.corps) continue;
+    const desc = RAPIER.RigidBodyDesc.fixed().setTranslation(s.position.x, s.position.y, s.position.z);
+    if (s.rotation) desc.setRotation(s.rotation);
+    s.corps = world.createRigidBody(desc);
+    s.collider = world.createCollider(s.forme().setCollisionGroups(CG_MONDE), s.corps);
+    infos.set(s.collider.handle, { decor: { colliders: [s.collider], son: s.son } });
+    solidesActifs.add(s);
+  }
+}
+
 // Retire complètement un objet mobile du monde (objets créés depuis l'inventaire)
 export function supprimerObjet(o) {
   details = details.filter((d) => { for (let p = d.mesh; p; p = p.parent) if (p === o.groupe) return false; return true; });

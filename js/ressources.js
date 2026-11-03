@@ -4,8 +4,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { PROFIL, ULTRA } from './profil.js';
 
 const PH = 'https://dl.polyhaven.org/file/ph-assets/';
+const RES = PROFIL.textures;
 const THREE_EXEMPLES = 'https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/models/gltf/';
 
 // Matériaux photo : id Poly Haven, taille réelle d'un motif (m), cartes à charger
@@ -20,12 +22,25 @@ export const MATERIAUX_PH = {
   plafond: { id: 'ceiling_interior', tuile: 2, cartes: ['diff'] },
   planches: { id: 'brown_planks_05', tuile: 2, cartes: ['diff', 'nor_gl'] },
   betonMur: { id: 'concrete_wall_004', tuile: 3, cartes: ['diff', 'nor_gl'] },
-  // Vallée suisse
+  // Vallée suisse : les sols du relief
+  solVert: { id: 'forrest_ground_01', tuile: 3, cartes: ['diff', 'nor_gl'] },
+  foret: { id: 'forest_ground_04', tuile: 2.5, cartes: ['diff', 'nor_gl'] },
+  mousse: { id: 'rocky_terrain_02', tuile: 4, cartes: ['diff', 'nor_gl'] },
   roche: { id: 'aerial_rocks_02', tuile: 4, cartes: ['diff', 'nor_gl'] },
-  sable: { id: 'gravelly_sand', tuile: 2, cartes: ['diff'] },
+  neige: { id: 'snow_02', tuile: 3, cartes: ['diff'] },
+  galets: { id: 'dry_river_pebbles', tuile: 2, cartes: ['diff'] },
+  // Écorce des sapins, pierre et tuiles des chalets
+  ecorce: { id: 'pine_bark', tuile: 1.5 },
   pierre: { id: 'rock_wall_04', tuile: 2, cartes: ['diff', 'nor_gl'] },
   toit: { id: 'clay_roof_tiles_02', tuile: 2, cartes: ['diff', 'nor_gl'] },
 };
+
+// Plantes, rochers et bois morts Poly Haven pour le sous-bois (textures 1k : ils sont nombreux)
+export const NATURE_PH = [
+  'fern_02', 'shrub_04', 'nettle_plant', 'weed_plant_02', 'dandelion_01',
+  'rock_moss_set_01', 'rock_moss_set_02', 'rock_07', 'rock_09', 'boulder_01', 'rock_face_01', 'rock_face_02',
+  'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dry_branches_medium_01', 'pine_roots',
+];
 
 // Modèles 3D Poly Haven utilisés dans la carte
 export const MODELES_PH = [
@@ -36,7 +51,8 @@ export const MODELES_PH = [
   'metal_trash_can', 'WetFloorSign_01', 'portable_generator', 'street_lamp_02',
 ];
 
-export const ressources = { modeles: new Map(), materiaux: {}, ferrari: null, environnement: null, ciel: null, normalesEau: null };
+export const ressources = { modeles: new Map(), nature: new Map(), materiaux: {}, ferrari: null, environnement: null, ciel: null,
+  normalesEau: null, rameaux: null };
 
 const chargeurTextures = new THREE.TextureLoader();
 chargeurTextures.setCrossOrigin('anonymous');
@@ -45,7 +61,7 @@ function textureAsync(url, couleur) {
   return new Promise((ok) => {
     chargeurTextures.load(url, (t) => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = 4;
+      t.anisotropy = ULTRA ? 8 : 4;
       if (couleur) t.colorSpace = THREE.SRGBColorSpace;
       ok(t);
     }, undefined, () => ok(null));
@@ -53,7 +69,7 @@ function textureAsync(url, couleur) {
 }
 
 async function materiauPH(nom, { id, tuile, cartes = ['diff', 'nor_gl', 'arm'] }) {
-  const url = (c) => `${PH}Textures/jpg/1k/${id}/${id}_${c}_1k.jpg`;
+  const url = (c) => `${PH}Textures/jpg/${RES}/${id}/${id}_${c}_${RES}.jpg`;
   const [diff, nor, arm] = await Promise.all([
     textureAsync(url('diff'), true),
     cartes.includes('nor_gl') ? textureAsync(url('nor_gl')) : null,
@@ -75,7 +91,7 @@ export async function chargerRessources(renderer, progression = () => {}) {
   const suivre = (p) => Promise.race([p.catch((e) => console.warn(e)), new Promise((ok) => setTimeout(ok, 40000))])
     .finally(() => progression(++finies / taches.length));
 
-  taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr`).then((hdr) => {
+  taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/${PROFIL.ciel}/kloofendal_48d_partly_cloudy_puresky_${PROFIL.ciel}.hdr`).then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     const pmrem = new THREE.PMREMGenerator(renderer);
     ressources.environnement = pmrem.fromEquirectangular(hdr).texture;
@@ -98,6 +114,20 @@ export async function chargerRessources(renderer, progression = () => {}) {
       .then((g) => ressources.modeles.set(id, g.scene))
       .catch((e) => console.warn('Modèle indisponible :', id, e))));
   }
+
+  for (const id of NATURE_PH) {
+    taches.push(suivre(gltf.loadAsync(`${PH}Models/gltf/1k/${id}/${id}_1k.gltf`)
+      .then((g) => ressources.nature.set(id, g.scene))
+      .catch((e) => console.warn('Plante ou rocher indisponible :', id, e))));
+  }
+  // Rameaux de sapin (planche de 7 rameaux photo, avec transparence et relief) : on en fabrique les sapins
+  const rameau = (c) => `${PH}Models/jpg/${RES}/fir_tree_01/fir_tree_01_twig_${c}_${RES}.jpg`;
+  taches.push(suivre(Promise.all([textureAsync(rameau('diff'), true), textureAsync(rameau('nor_gl')), textureAsync(rameau('alpha'))])
+    .then(([couleur, normales, alpha]) => {
+      if (!couleur || !alpha) return;
+      for (const t of [couleur, normales, alpha]) if (t) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      ressources.rameaux = { couleur, normales, alpha };
+    })));
 
   taches.push(suivre(gltf.loadAsync(THREE_EXEMPLES + 'ferrari.glb').then((g) => { ressources.ferrari = g.scene; })
     .catch((e) => console.warn('Voiture indisponible', e))));
