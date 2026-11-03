@@ -7,11 +7,14 @@ await RAPIER.init();
 export { RAPIER };
 
 // Groupes de collision : (à quel groupe j'appartiens << 16) | (avec quels groupes je collisionne)
-export const G_MONDE = 0x0001, G_JOUEUR = 0x0002, G_MAIN = 0x0004, G_PNJ = 0x0008, G_RAGDOLL = 0x0010, G_TENU = 0x0020;
+export const G_MONDE = 0x0001, G_JOUEUR = 0x0002, G_MAIN = 0x0004, G_PNJ = 0x0008, G_RAGDOLL = 0x0010, G_TENU = 0x0020, G_RAMPE = 0x0040;
 export const groupes = (membre, filtre) => (membre << 16) | filtre;
 export const CG_MONDE = groupes(G_MONDE, 0xffff);
 export const CG_TENU = groupes(G_TENU, 0xffff & ~G_JOUEUR);             // un objet tenu ne pousse pas notre propre corps
-export const CG_JOUEUR = groupes(G_JOUEUR, G_MONDE | G_PNJ);
+export const CG_JOUEUR = groupes(G_JOUEUR, G_MONDE | G_PNJ | G_RAMPE);
+// Escaliers : les marches arrêtent les objets et les mains, mais le joueur glisse sur une rampe invisible (montée fluide)
+export const CG_MARCHES = groupes(G_MONDE, 0xffff & ~G_JOUEUR);
+export const CG_RAMPE = groupes(G_RAMPE, G_JOUEUR);
 export const CG_MAIN = groupes(G_MAIN, G_MONDE | G_MAIN | G_PNJ | G_RAGDOLL | G_TENU);
 export const CG_PNJ = groupes(G_PNJ, G_MONDE | G_MAIN | G_JOUEUR | G_TENU);
 export const CG_RAGDOLL = groupes(G_RAGDOLL, G_MONDE | G_MAIN | G_TENU | G_RAGDOLL);   // les membres se cognent entre eux
@@ -78,12 +81,14 @@ const mTmp = new THREE.Matrix4();
 //   visuel: true -> seulement affiché, sans collision
 // son : 'bois' | 'metal' | 'carton' | 'caoutchouc' | 'plastique' | 'pierre' | 'herbe' | 'chair'
 export function creerObjet({ pos, rot = [0, 0, 0], formes, masse = 0, friction = 0.8, rebond = 0.05, amortissement = 0,
-  nom = '', son = masse > 0 ? 'bois' : 'pierre', fusion = true }) {
+  nom = '', son = masse > 0 ? 'bois' : 'pierre', fusion = true, cg = CG_MONDE }) {
   const q = quat(rot);
   const fixe = masse <= 0;
   const desc = fixe ? RAPIER.RigidBodyDesc.fixed() : RAPIER.RigidBodyDesc.dynamic().setCcdEnabled(true);
   desc.setTranslation(...pos).setRotation(q);
   if (amortissement) desc.setLinearDamping(amortissement * 0.1).setAngularDamping(amortissement);
+  // Résistance au roulement : sans elle, balles et cylindres rouleraient indéfiniment
+  else if (!fixe && formes.some((f) => f.type === 'boule' || f.type === 'cylindre')) desc.setLinearDamping(0.05).setAngularDamping(0.5);
   const corps = world.createRigidBody(desc);
 
   const physiques = formes.filter((f) => !f.visuel);
@@ -99,10 +104,10 @@ export function creerObjet({ pos, rot = [0, 0, 0], formes, masse = 0, friction =
     const fp = f.pos ?? [0, 0, 0], fq = quat(f.rot ?? [0, 0, 0]);
     if (!f.visuel) {
       cd.setTranslation(...fp).setRotation(fq).setDensity(densite)
-        .setFriction(f.friction ?? friction).setRestitution(f.rebond ?? rebond).setCollisionGroups(CG_MONDE);
+        .setFriction(f.friction ?? friction).setRestitution(f.rebond ?? rebond).setCollisionGroups(cg);
       if (!fixe) cd.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(masse * GRAVITE * 3);
       const collider = world.createCollider(cd, corps);
-      infos.set(collider.handle, fixe ? { decor: objet } : { objet });
+      if (cg !== CG_RAMPE) infos.set(collider.handle, fixe ? { decor: objet } : { objet });   // une rampe invisible ne s'attrape pas
       objet.colliders.push(collider);
     }
 

@@ -71,6 +71,8 @@ export class Inventaire {
   // Appelé quand une main lâche un objet
   ranger(main, objet) {
     if (objet.masse > MASSE_MAX || objet.tailleMax > TAILLE_MAX || objet.range) return false;
+    const v = objet.corps.linvel();
+    if (Math.hypot(v.x, v.y, v.z) > 1.5) return false;   // un objet lancé n'est pas rangé, même s'il passe près du corps
     main.poing(poing);
     const e = this.plusProche(poing, DIST_RANGER, false);
     if (!e) return false;

@@ -20,6 +20,7 @@ const PORTEE_OBJET = 0.09;              // distance max (jusqu'à la surface) po
 const PORTEE_PNJ = 0.08;
 const PORTEE_DECOR = 0.035;             // il faut vraiment toucher le décor pour s'y accrocher
 const ZONE_RECHERCHE = new RAPIER.Ball(0.14);
+const ZONE_CHEVAUCHEMENT = new RAPIER.Ball(0.045);
 const ATTRACTION_PORTEE = 9, ATTRACTION_MASSE_MAX = 8;
 // Une poignée (lampe, lance-balles) se tient canon vers l'avant (-Y de la main) et poignée dans le poing
 const PRISE_POIGNEE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
@@ -225,7 +226,11 @@ export class MainPhysique {
     if (!this.active) return;
     if (this.delaiCollisions > 0) {
       this.delaiCollisions -= dt;
-      if (this.delaiCollisions <= 0 && !this.tenu) for (const c of this.colliders) c.setEnabled(true);
+      if (this.delaiCollisions <= 0 && !this.tenu) {
+        // La main ne redevient solide qu'une fois sortie de l'objet (sinon elle le projetterait)
+        if (this.chevauche()) this.delaiCollisions = 0.05;
+        else for (const c of this.colliders) c.setEnabled(true);
+      }
     }
     if (this.tenu) {
       this.poseAttachee(pTmp, qTmp);
@@ -250,6 +255,16 @@ export class MainPhysique {
     this.corps.applyTorqueImpulse(couple, true);
   }
 
+  chevauche() {
+    let touche = false;
+    world.intersectionsWithShape(this.poing(new THREE.Vector3()), { x: 0, y: 0, z: 0, w: 1 }, ZONE_CHEVAUCHEMENT, (col) => {
+      if (infos.get(col.handle)?.main) return true;
+      touche = true;
+      return false;
+    }, undefined, CG_MAIN, undefined, this.corps);
+    return touche;
+  }
+
   // Attraction à distance : on vise un objet main serrée, puis un coup de poignet vers soi le fait voler jusqu'à la main
   majAttraction(dt) {
     const poing = this.poing(new THREE.Vector3());
@@ -271,8 +286,9 @@ export class MainPhysique {
       this.dureeVisee += dt;
       this.cadre.setFromObject(o.groupe);
       this.cadre.visible = true;
+      // Il faut viser un instant puis donner un vrai coup de poignet (évite les déclenchements par accident)
       const versSoi = -this.vitesseMain.dot(this.rayon.dir);
-      const coupDePoignet = versSoi > 1.1 || this.vitesseMain.y > 1.4 || (this.modePC && this.dureeVisee > 0.3);
+      const coupDePoignet = (this.dureeVisee > 0.25 && (versSoi > 1.6 || this.vitesseMain.y > 1.8)) || (this.modePC && this.dureeVisee > 0.3);
       if (coupDePoignet) this.lancerVersMain(o, poing);
     } else {
       this.visee = null;
@@ -299,7 +315,10 @@ export class MainPhysique {
     if (this.tenu) this.poseAttachee(g.position, g.quaternion);
     else {
       const p = this.corps.translation(), r = this.corps.rotation();
-      g.position.set(p.x, p.y, p.z);
+      vPoing.set(p.x, p.y, p.z);
+      // Main appuyée contre une surface : on lisse l'affichage pour gommer les micro-tremblements du contact
+      if (vPoing.distanceTo(this.cible.pos) > 0.01 && g.position.distanceTo(vPoing) < 0.05) g.position.lerp(vPoing, 0.35);
+      else g.position.copy(vPoing);
       g.quaternion.set(r.x, r.y, r.z, r.w);
     }
     if (this.doigtsAPlacer && this.tenu && this.visuel.pret) {

@@ -8,7 +8,7 @@
 //        └────────── HALL ──────────┘   <- départ
 //                 sud (+z)
 import * as THREE from 'three';
-import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer } from './monde.js';
+import { RAPIER, world, scene, creerObjet, ajouterDecor, fusionnerDecor, objets, vibrer, CG_MARCHES, CG_RAMPE } from './monde.js';
 import { creerMateriaux, texturePanneau, textureEnseigne } from './materiaux.js';
 import { jouerSon } from './sons.js';
 import { ressources, copieModele } from './ressources.js';
@@ -45,6 +45,22 @@ function murOuvert(x1, z1, x2, z2, h, materiau, a, b, hOuv, ep = 0.3) {
   segment(axe, fixe, debut - ep / 2, a, h, materiau, ep);
   segment(axe, fixe, b, fin + ep / 2, h, materiau, ep);
   if (hOuv < h) segment(axe, fixe, a, b, h - hOuv, materiau, ep, hOuv);
+}
+
+// Rampe invisible sous un escalier, de "bas" à "haut" (nez des marches) : seul le joueur la sent,
+// pour monter les marches en douceur comme dans la vraie vie
+function rampe(bas, haut, largeur) {
+  const a = new THREE.Vector3(...bas), b = new THREE.Vector3(...haut);
+  const long = new THREE.Vector3().subVectors(b, a);
+  const L = long.length();
+  long.normalize();
+  const cote = new THREE.Vector3().crossVectors(long, new THREE.Vector3(0, 1, 0)).normalize();
+  const dessus = new THREE.Vector3().crossVectors(cote, long);
+  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(long, dessus, cote));
+  const centre = a.clone().add(b).multiplyScalar(0.5).addScaledVector(dessus, -0.05);
+  const e = new THREE.Euler().setFromQuaternion(q);
+  creerObjet({ pos: [centre.x, centre.y, centre.z], rot: [e.x, e.y, e.z], cg: CG_RAMPE, fusion: false,
+    formes: [B([L, 0.1, largeur], null, { cache: true })] });
 }
 
 function panneau(texture, pos, rotY, l = 2, h = 1) {
@@ -512,7 +528,7 @@ function construireEntrepot() {
   baril([-17.5, 0.44, 6.2], M.acierBleu); baril([-16.8, 0.44, 6.9], M.acierVert); baril([-17.6, 0.44, 7.5], M.acierBleu);
   creerObjet({ pos: [-16.6, 0.29, 8.4], rot: [Math.PI / 2, 0.4, 0], masse: 20, son: 'metal', formes: [C(0.29, 0.88, M.acierOrange)], nom: 'baril' });
   // Pneus, caisses en plastique, caisse à outils, masse
-  [[-20.5, 8.8], [-21.6, 8.6], [-22.7, 8.75]].forEach(([x, z]) =>
+  [[-24.6, 7.6], [-24.0, 6.6], [-25.2, 6.5]].forEach(([x, z]) =>
     objetModele('old_tyre', [x, 0, z], { masse: 9, taille: 0.65, forme: 'boite', son: 'caoutchouc', nom: 'pneu', rebond: 0.35 }));
   for (let i = 0; i < 4; i++) objetModele('plastic_crate_02', [-30.9, (i % 2) * 0.32, -9.2 + Math.floor(i / 2) * 0.62], { masse: 1.5, taille: 0.55, son: 'plastique', nom: 'caisse plastique' });
   objetModele('metal_toolbox', [-18.2, 0, -9.3], { masse: 6, taille: 0.5, son: 'metal', nom: 'caisse à outils' });
@@ -542,8 +558,9 @@ function construireEntrepot() {
   for (const z of [2.2, 6, 9.8]) bloc([-26.65, 1.4, z], [0.25, 2.8, 0.25], M.acierGris);
   for (let k = 1; k <= 11; k++) {
     const h = 3 - 0.25 * k;
-    bloc([-26.25 + 0.5 * (k - 1), h / 2, 9.2], [0.5, h, 1.2], M.beton);
+    bloc([-26.25 + 0.5 * (k - 1), h / 2, 9.2], [0.5, h, 1.2], M.beton, { cg: CG_MARCHES });
   }
+  rampe([-20.5, 0, 9.2], [-26.5, 3, 9.2], 1.2);
   // Garde-corps : ouvert en z 3.5..4.5 (échelle) et z 8.6..10 (escalier)
   const poteauGC = (x, z) => B([0.05, 1, 0.05], M.acierOrange, { pos: [x, 0, z] });
   creerObjet({ pos: [-26.55, 3.5, 0], formes: [
@@ -682,8 +699,9 @@ function construireParcours() {
   bloc([-11.5, 1.5, -25.5], [5, 3, 5], M.brique);
   for (let k = 1; k <= 11; k++) {
     const h = 3 - 0.25 * k;
-    bloc([-9.6, h / 2, -22.75 + 0.5 * (k - 1)], [1.2, h, 0.5], M.beton);
+    bloc([-9.6, h / 2, -22.75 + 0.5 * (k - 1)], [1.2, h, 0.5], M.beton, { cg: CG_MARCHES });
   }
+  rampe([-9.6, 0, -17], [-9.6, 3, -23], 1.2);
   creerObjet({ pos: [0, 3.5, 0], formes: [
     B([3.8, 0.05, 0.05], M.acierOrange, { pos: [-12.1, 0.5, -23.05] }),
     ...[-14, -12.1, -10.25].map((x) => B([0.05, 1, 0.05], M.acierOrange, { pos: [x, 0, -23.05] })),
