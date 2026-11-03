@@ -48,8 +48,10 @@ export function distanceLac(x, z) {
 
 // Hauteur du sol en (x, z)
 export function hauteur(x, z) {
-  // Prairies vallonnées
-  let h = (fbm(x / 170, z / 170, 4) - 0.5) * 16 + (fbm(x / 38 + 50, z / 38, 3) - 0.5) * 2.5;
+  // Prairies vallonnées, plus douces dans le couloir entre le complexe et le lac (pour voir le lac en sortant)
+  const couloir = 0.2 + 0.8 * lisse(50, 190, Math.abs(x - 10)) + 0.8 * lisse(-40, 20, z);
+  let h = ((fbm(x / 170, z / 170, 4) - 0.5) * 16 + (fbm(x / 38 + 50, z / 38, 3) - 0.5) * 2.5) * Math.min(1, couloir);
+  h -= 2.2 * lisse(-40, -200, z) * (1 - lisse(120, 260, Math.abs(x)));   // le terrain descend doucement vers le lac
   // Montagnes, de plus en plus hautes en s'éloignant du fond de la vallée
   const r = Math.hypot(x - VALLEE.x, (z - VALLEE.z) / 1.4);
   const m = lisse(430, 1300, r);
@@ -147,8 +149,9 @@ vec3 nrm = normalize(vNormaleMonde);
 float penteSol = 1.0 - nrm.y;
 float variation = bruitDoux(vMonde.xz);
 // Herbe : deux échelles mélangées pour casser la répétition, teinte alpine plus verte
-vec3 herbe = mix(texture2D(tHerbe, vMonde.xz / 3.0).rgb, texture2D(tHerbe, vMonde.xz / 23.0).rgb, 0.45);
-herbe *= mix(vec3(0.72, 0.95, 0.55), vec3(0.85, 1.0, 0.62), variation * 0.5 + 0.5);
+vec3 herbe = mix(texture2D(tHerbe, vMonde.xz / 3.0).rgb, texture2D(tHerbe, vMonde.xz / 23.0).rgb, 0.3);
+float lum = dot(herbe, vec3(0.333));
+herbe = mix(vec3(lum), herbe, 0.6) * mix(vec3(0.62, 0.98, 0.42), vec3(0.75, 1.05, 0.5), variation * 0.5 + 0.5) * 1.05;
 // Roche projetée sur trois axes (pas d'étirement sur les falaises)
 vec3 poidsAxes = pow(abs(nrm), vec3(4.0)); poidsAxes /= (poidsAxes.x + poidsAxes.y + poidsAxes.z);
 vec3 roche = texture2D(tRoche, vMonde.zy / 9.0).rgb * poidsAxes.x + texture2D(tRoche, vMonde.xz / 9.0).rgb * poidsAxes.y + texture2D(tRoche, vMonde.xy / 9.0).rgb * poidsAxes.z;
@@ -170,7 +173,64 @@ roughnessFactor = mix(roughnessFactor, 0.55, wNeige);`);
   return m;
 }
 
-// --- Sapins (géométrie légère, dessinée en grand nombre d'un coup) ---
+// --- Sapins : trois panneaux croisés avec une image de sapin dessinée (branches, aiguilles, tronc) ---
+function textureSapin() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#3b2a1e'; g.fillRect(122, 380, 12, 132);   // tronc
+  // Étages de branches, du haut vers le bas, de plus en plus larges
+  for (let y = 10; y < 470; y += 3) {
+    const largeur = 8 + (y / 470) * 112 * (0.85 + 0.15 * Math.sin(y * 0.21));
+    const n = 3 + Math.floor(largeur / 10);
+    for (let k = 0; k < n; k++) {
+      const s = k % 2 ? 1 : -1;
+      const l = largeur * (0.4 + Math.random() * 0.6);
+      const v = 20 + Math.random() * 30;
+      g.strokeStyle = `hsl(${120 + Math.random() * 25}, ${30 + Math.random() * 20}%, ${v * (0.55 + 0.45 * (1 - y / 520))}%)`;
+      g.lineWidth = 1.5 + Math.random() * 2;
+      g.beginPath();
+      g.moveTo(128, y);
+      g.quadraticCurveTo(128 + s * l * 0.5, y + 6, 128 + s * l, y + 12 + Math.random() * 14);
+      g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function geometrieSapinCroise() {
+  const plans = [0, Math.PI / 3, (2 * Math.PI) / 3].map((a) => {
+    const p = new THREE.PlaneGeometry(5.2, 10.4);
+    p.translate(0, 5.2, 0);
+    p.rotateY(a);
+    return p;
+  });
+  return mergeIndexes(plans);
+}
+function mergeIndexes(geos) {
+  const pos = [], nor = [], uv = [], idx = [];
+  let base = 0;
+  for (const g of geos) {
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); uv.push(...g.attributes.uv.array);
+    idx.push(...Array.from(g.index.array, (i) => i + base));
+    base += g.attributes.position.count;
+  }
+  const r = new THREE.BufferGeometry();
+  r.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  r.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  r.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  r.setIndex(idx);
+  // Normales "vers le haut et l'extérieur" : éclairage doux comme un vrai feuillage
+  for (let i = 0; i < r.attributes.normal.count; i++) {
+    const x = r.attributes.position.getX(i), z = r.attributes.position.getZ(i);
+    const n = new THREE.Vector3(x, 1.4, z).normalize();
+    r.attributes.normal.setXYZ(i, n.x, n.y, n.z);
+  }
+  return r;
+}
+
 function geometrieSapin() {
   const morceaux = [];
   const tronc = new THREE.CylinderGeometry(0.12, 0.22, 2.2, 6);
@@ -254,8 +314,10 @@ function zoneLibre(x, z) {
 }
 
 function planterForet(INT) {
-  const geo = geometrieSapin();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  const geo = geometrieSapinCroise();
+  const tex = textureSapin();
+  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.95 });
+  const ombreSapin = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.45 });
   const CHUNKS = 8, tailleChunk = INT.taille / CHUNKS;
   const parChunk = Array.from({ length: CHUNKS * CHUNKS }, () => []);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -290,8 +352,9 @@ function planterForet(INT) {
       q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rot);
       m.compose(p.set(x, y, z), q, s.set(t, t * (0.9 + 0.25 * aleatoire(i)), t));
       inst.setMatrixAt(i, m);
-      inst.setColorAt(i, teinte.setHSL(0.33 + aleatoire(i + 1) * 0.06, 0.35, 0.75 + aleatoire(i + 2) * 0.3));
+      inst.setColorAt(i, teinte.setHSL(0.25 + aleatoire(i + 1) * 0.08, 0.25, 0.8 + aleatoire(i + 2) * 0.25));
     });
+    inst.customDepthMaterial = ombreSapin;
     inst.castShadow = true;
     inst.receiveShadow = true;
     inst.computeBoundingSphere();
