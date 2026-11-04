@@ -60,7 +60,9 @@ function alleger(geo, triangles) {
   const p = geo.attributes.position, pos = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) { pos[i * 3] = p.getX(i); pos[i * 3 + 1] = p.getY(i); pos[i * 3 + 2] = p.getZ(i); }
   const cible = Math.max(3, Math.floor(triangles) * 3);
-  const [idx] = MeshoptSimplifier.simplify(new Uint32Array(geo.index.array), pos, 3, cible, 0.08);
+  let [idx] = MeshoptSimplifier.simplify(new Uint32Array(geo.index.array), pos, 3, cible, 0.08);
+  // (certains modèles ont des triangles qui ne se touchent pas : on les allège alors "grossièrement")
+  if (idx.length > cible * 2 && MeshoptSimplifier.simplifySloppy) [idx] = MeshoptSimplifier.simplifySloppy(new Uint32Array(geo.index.array), pos, 3, cible, 0.08);
   geo.setIndex(new THREE.Uint32BufferAttribute(idx, 1));
   return geo;
 }

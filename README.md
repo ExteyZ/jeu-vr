@@ -3,11 +3,14 @@
 Un jeu de physique en réalité virtuelle (WebXR) pour Meta Quest, qui marche directement dans le navigateur du casque.
 Adresse : **exteyz.github.io**
 
-- Une ville suisse au bord d'un grand lac turquoise (1,5 km) : quai en pierre et promenade (réverbères, bancs, fleurs),
-  port avec pontons et barques qui flottent, grande place pavée avec fontaine, terrasses de café et église à clocher,
-  rues pavées bordées de maisons colorées de 3 à 5 étages (volets, balcons, boutiques à stores, toits de tuiles ou
-  d'ardoises). Derrière : une colline avec un hameau de chalets. En face : un cirque de falaises calcaires inspiré du lac
-  d'Oeschinen, avec forêts de sapins, et un belvédère avec vue sur tout le lac.
+- Une ville suisse au bord d'un grand lac turquoise (1,5 km) : quai en pierre et promenade bordée de tilleuls
+  (réverbères à l'ancienne, bancs, fleurs), port avec pontons et barques qui flottent, grande place dallée avec fontaine,
+  tilleuls, terrasses de café et église à clocher. Quatre rangées de maisons suivent la courbe de la rive, le long de
+  rues pavées avec trottoirs : murs épais avec fenêtres en retrait, volets, balcons, jardinières de géraniums, chaînes
+  d'angle en pierre, boutiques à stores, toits à deux pans, à pignon sur rue ou à quatre pans, lucarnes et avant-toits.
+  Derrière : une colline avec un hameau de chalets. Autour du lac (comme au lac d'Oeschinen) : des pentes boisées et un
+  cirque de falaises calcaires en gradins (parois, vires herbeuses, couloirs, contreforts), avec des sommets enneigés
+  qui pâlissent dans la brume au loin, sous un ciel à nuages. Un belvédère offre la vue sur tout le lac.
 - Mains physiques à 5 doigts, comme dans Bonelab : chaque doigt suit le capteur de la manette sous lui (index posé ou non
   sur la gâchette, pouce posé ou levé, majeur, annulaire et auriculaire avec la gâchette du majeur), donc on peut pointer,
   faire un pouce levé ou serrer le poing ; les doigts s'écartent main ouverte. Elles se bloquent contre les murs, poussent les objets, sentent leur poids
@@ -25,8 +28,9 @@ Le jeu choisit tout seul :
 - **Ultra** quand la page est ouverte sur un PC (casque branché par Quest Link ou Air Link) : c'est la carte graphique
   du PC qui dessine. Vrais sapins en 3D (rameaux et écorce photo), herbe dense jusqu'à 80 m, fougères, rochers moussus,
   troncs morts, fleurs, galets sur les rives, relief fin avec sept sols photo en 2K et leur relief, ombres douces sur 70 m,
-  ombres des montagnes sur toute la vallée, herbe jusqu'à 140 m, ciel photo 4K,
-  lac qui reflète la vallée. Sur l'écran du PC (sans casque), l'image passe en plus par un post-traitement
+  ombres des montagnes sur toute la vallée, herbe jusqu'à 140 m, ciel photo 4K avec nuages, perspective aérienne
+  (brume plus épaisse en bas de la vallée), relief détaillé sur 2,8 km (plus simple au loin, sans fentes),
+  lac qui reflète les montagnes. Sur l'écran du PC (sans casque), l'image passe en plus par un post-traitement
   « cinéma » : ombre des creux et des contacts, lueurs, étalonnage des couleurs.
   Premier lancement : environ 350 Mo à télécharger (ensuite gardés par le navigateur).
 - **Quest** quand la page est ouverte dans le navigateur du casque seul : même monde, plus léger.

@@ -9,20 +9,20 @@ export const PROFIL = ULTRA ? {
   nom: 'Ultra',
   textures: '2k',               // résolution des matériaux photo
   ciel: '4k',                   // résolution du ciel photo
-  segmentsRelief: 640,          // zone détaillée de 2 km : un point tous les 3,1 m
+  segmentsRelief: 896,          // zone détaillée de 2,8 km : un point tous les 3,1 m
   ombre: { taille: 4096, portee: 70 },
   herbe: { touffes: 50000, rayon: 30 },
-  arbres: { nombre: 12000, portee3D: 62, impostor: 1024 },
+  arbres: { nombre: 26000, portee3D: 62, impostor: 1024 },
   sousBois: { rayon: 90, densite: 1 },
   lampes: true,
 } : {
   nom: 'Quest',
   textures: '1k',
   ciel: '1k',
-  segmentsRelief: 320,
+  segmentsRelief: 384,
   ombre: { taille: 1024, portee: 16 },
   herbe: { touffes: 7000, rayon: 11 },
-  arbres: { nombre: 3200, portee3D: 0, impostor: 512 },
+  arbres: { nombre: 4500, portee3D: 0, impostor: 512 },
   sousBois: { rayon: 35, densite: 0.35 },
   lampes: true,
 };

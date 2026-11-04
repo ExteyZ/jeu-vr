@@ -16,8 +16,8 @@ export const MATERIAUX_PH = {
   planches: { id: 'brown_planks_05', tuile: 2, cartes: ['diff', 'nor_gl'] },
   // La ville : façades en plâtre peint, pavés, dalles du quai, mur du quai, tuiles et ardoises, planches du port
   facade: { id: 'painted_plaster_wall', tuile: 3 },
-  pavage: { id: 'cobblestone_floor_01', tuile: 2.4 },
-  place: { id: 'cobblestone_large_01', tuile: 3.2 },
+  pavage: { id: 'cobblestone_floor_01', tuile: 1.5 },
+  place: { id: 'cobblestone_large_01', tuile: 2.4 },
   dalles: { id: 'stone_pavers', tuile: 3 },
   quai: { id: 'old_stone_wall', tuile: 3 },
   tuiles: { id: 'roof_tiles', tuile: 2.5 },
@@ -86,8 +86,27 @@ async function materiauPH(nom, { id, tuile, cartes = ['diff', 'nor_gl', 'arm'] }
   return m;
 }
 
-// Ciel photo : ciel bleu dégagé de fin de matinée (soleil assez haut, les falaises sont bien éclairées)
-const CIEL = 'qwantani_mid_morning_puresky';
+// Ciel photo : ciel bleu avec des nuages (cumulus de beau temps), soleil assez haut
+const CIEL = 'kloofendal_48d_partly_cloudy_puresky';
+
+// Couleur du ciel juste au-dessus de l'horizon (moyenne d'une bande de la photo) : c'est la couleur de la brume
+// au loin, pour que les montagnes lointaines se fondent dans le ciel
+function couleurHorizon(hdr) {
+  try {
+    const { data, width: L, height: H } = hdr.image;
+    const lire = data instanceof Uint16Array ? (i) => THREE.DataUtils.fromHalfFloat(data[i]) : (i) => data[i];
+    const somme = [0, 0, 0];
+    let n = 0;
+    for (let y = Math.floor(H * 0.47); y < Math.floor(H * 0.495); y++) for (let x = 0; x < L; x += 4) {
+      const i = (y * L + x) * 4;
+      for (let c = 0; c < 3; c++) somme[c] += Math.min(lire(i + c), 4);
+      n++;
+    }
+    return new THREE.Color(somme[0] / n, somme[1] / n, somme[2] / n);
+  } catch {
+    return null;
+  }
+}
 
 // Le soleil est le point le plus lumineux du ciel photo : on en déduit sa direction, pour que les ombres du jeu
 // tombent dans le même sens que la lumière du ciel
@@ -120,6 +139,7 @@ export async function chargerRessources(renderer, progression = () => {}) {
   taches.push(suivre(new RGBELoader().loadAsync(`${PH}HDRIs/hdr/${PROFIL.ciel}/${CIEL}_${PROFIL.ciel}.hdr`).then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     ressources.directionSoleil = trouverSoleil(hdr);
+    ressources.horizon = couleurHorizon(hdr);
     const pmrem = new THREE.PMREMGenerator(renderer);
     ressources.environnement = pmrem.fromEquirectangular(hdr).texture;
     ressources.ciel = hdr;

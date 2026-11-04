@@ -59,10 +59,14 @@ export function construireEau(textureNormales) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvProfondeur = aProfondeur;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vProfondeur;\nuniform float tempsEau;')
+      // Une vaguelette ne peut pas refléter le fond du lac : le reflet reste au-dessus de l'horizon (montagnes, ciel)
+      .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
+        'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );',
+        'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );\n\t\treflectVec = normalize( vec3( reflectVec.x, max( reflectVec.y, 0.012 ), reflectVec.z ) );'))
       .replace('#include <color_fragment>', `#include <color_fragment>
-float fond = smoothstep(0.0, 16.0, vProfondeur);
-// Eau de glacier : turquoise laiteux (les fines particules de roche diffusent la lumière)
-diffuseColor.rgb *= mix(vec3(0.07, 0.4, 0.37), vec3(0.006, 0.1, 0.13), fond);
+float fond = smoothstep(0.0, 14.0, vProfondeur);
+// Eau de glacier : turquoise sur les bords (les fines particules de roche diffusent la lumière), bleu-vert profond au large
+diffuseColor.rgb *= mix(vec3(0.035, 0.2, 0.19), vec3(0.003, 0.035, 0.05), fond);
 diffuseColor.a = mix(0.5, 0.97, smoothstep(0.0, 2.5, vProfondeur));
 // Écume légère au bord de l'eau
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.55, 0.52), (1.0 - smoothstep(0.0, 0.15, vProfondeur)) * 0.3);`)
@@ -70,7 +74,9 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.55, 0.52), (1.0 - smoothste
         'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
         `vec3 n1 = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
 vec3 n2 = texture2D( normalMap, vNormalMapUv * 0.37 + vec2(-tempsEau * 0.0011, tempsEau * 0.0017) ).xyz * 2.0 - 1.0;
-vec3 mapN = normalize(vec3(n1.xy + n2.xy, n1.z * n2.z));`))
+// Au loin, le lac paraît plus calme : il reflète les montagnes comme un miroir
+float calme = smoothstep(60.0, 500.0, length(vViewPosition));
+vec3 mapN = normalize(vec3((n1.xy + n2.xy) * (1.0 - 0.75 * calme), n1.z * n2.z));`))
       // Vue rasante : l'eau devient un miroir, même là où elle est peu profonde
       .replace('#include <opaque_fragment>', `diffuseColor.a = mix(diffuseColor.a, 1.0, pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 4.0));
 #include <opaque_fragment>`);

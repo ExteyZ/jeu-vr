@@ -16,7 +16,7 @@ const uniformes = {
 
 // Densité d'herbe à chaque point de la grille du relief (0 = pas d'herbe)
 function densiteHerbe(x, z, y, penteSol) {
-  if (x > VILLE.x0 - 2 && x < VILLE.x1 + 2 && z < VILLE.z1 + 3) return 0;   // la ville est pavée
+  if (x > VILLE.x0 - 2 && x < VILLE.x1 + 2 && z < VILLE.z1 + 3 && z > -400) return 0;   // la ville est pavée
   if (distanceLac(x, z) < 1.02 || y < NIVEAU_LAC + 0.9) return 0;
   for (const c of HAMEAU) if (Math.hypot(x - c.x, z - c.z) < Math.max(c.l, c.p) * 0.62) return 0;
   let d = 1 - lisse(0.38, 0.58, penteSol);   // l'herbe tient aussi dans les pentes raides (alpages)

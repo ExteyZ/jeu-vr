@@ -9,10 +9,10 @@ import { construireCarte } from './carte.js';
 import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
-import { construireTerrain, hauteur, hauteurSol, riveSud, NIVEAU_LAC, HAMEAU, BELVEDERE } from './terrain.js';
+import { construireTerrain, majRelief, hauteur, hauteurSol, riveSud, NIVEAU_LAC, HAMEAU, BELVEDERE } from './terrain.js';
 import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, horsReflet } from './eau.js';
 import { construireHameau } from './village.js';
-import { construireVille } from './ville.js';
+import { construireVille, animerVille } from './ville.js';
 import { Pouvoirs } from './pouvoirs.js';
 import { Interface } from './interface.js';
 import { majEffets } from './effets.js';
@@ -37,8 +37,28 @@ renderer.xr.setFoveation(1);
 document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
-const HORIZON = 0xc9dcee;
-scene.fog = new THREE.Fog(HORIZON, ULTRA ? 260 : 180, ULTRA ? 6500 : 5200);   // brume légère : les montagnes lointaines bleuissent
+// Perspective aérienne : une brume exponentielle, plus épaisse au fond de la vallée qu'en altitude, qui prend la
+// couleur du ciel à l'horizon (les montagnes lointaines pâlissent et bleuissent, comme en vrai). Elle est appliquée
+// avant l'étalonnage des couleurs, comme la lumière, pour que les montagnes se fondent exactement dans le ciel.
+const HAUTEUR_BRUME = 650;
+for (const s of Object.values(THREE.ShaderLib)) {
+  s.fragmentShader = s.fragmentShader.replace(/(#include <tonemapping_fragment>\s*#include <colorspace_fragment>\s*)#include <fog_fragment>/, '#include <fog_fragment>\n\t$1');
+}
+THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n\tvarying float vFogDepth;\n\tvarying float vFogHaut;\n#endif';
+THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition.xyz );\n\tvFogHaut = dot( mvPosition.xyz, ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );\n#endif';
+THREE.ShaderChunk.fog_pars_fragment = '#ifdef USE_FOG\n\tuniform vec3 fogColor;\n\tvarying float vFogDepth;\n\tvarying float vFogHaut;\n\t#ifdef FOG_EXP2\n\t\tuniform float fogDensity;\n\t#else\n\t\tuniform float fogNear;\n\t\tuniform float fogFar;\n\t#endif\n#endif';
+THREE.ShaderChunk.fog_fragment = `#ifdef USE_FOG
+	#ifdef FOG_EXP2
+		float fogMonte = vFogHaut / ${HAUTEUR_BRUME}.0;
+		float fogTraverse = abs( fogMonte ) > 0.001 ? ( 1.0 - exp( - fogMonte ) ) / fogMonte : 1.0;
+		float fogFactor = 1.0 - exp( - fogDensity * exp( - max( cameraPosition.y, 0.0 ) / ${HAUTEUR_BRUME}.0 ) * fogTraverse * vFogDepth );
+	#else
+		float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
+	#endif
+	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+#endif`;
+const HORIZON = 0xc9dcee, DENSITE_BRUME = ULTRA ? 0.00026 : 0.0003;
+scene.fog = new THREE.FogExp2(HORIZON, DENSITE_BRUME);
 scene.background = new THREE.Color(HORIZON);
 const toileCiel = document.createElement('canvas');
 toileCiel.width = 4; toileCiel.height = 256;
@@ -62,7 +82,7 @@ const ambiance = new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15);
 if (ressources.environnement) {
   scene.environment = ressources.environnement;   // reflets et lumière ambiante venant du vrai ciel
   scene.background = ressources.ciel;
-  scene.fog.color.set(ULTRA ? 0xb6c6d6 : 0xc3d0dc);
+  if (ressources.horizon) scene.fog.color.copy(ressources.horizon);
   ciel.visible = false;
   ambiance.intensity = 0.35;
 }
@@ -203,7 +223,7 @@ const interfaceVR = new Interface({ joueur, camera, rig, mains, inventaire, pouv
 // Destinations de téléportation (le sommet est le plus haut pic de la zone détaillée de la vallée)
 const sommet = { x: 0, y: 0, z: 0 };
 const VOISINS = [[16, 0], [-16, 0], [0, 16], [0, -16], [12, 12], [-12, 12], [12, -12], [-12, -12]];
-for (let x = -950; x <= 950; x += 8) for (let z = -1430; z <= 520; z += 8) {
+for (let x = -1350; x <= 1350; x += 8) for (let z = -2020; z <= 740; z += 8) {
   const y = hauteur(x, z);
   if (y > sommet.y && VOISINS.every(([dx, dz]) => hauteur(x + dx, z + dz) <= y)) Object.assign(sommet, { x, y, z });
 }
@@ -425,19 +445,19 @@ function toutReplacer() {
 
 // Sous l'eau : brume verte et courte portée
 const BRUME_EAU = new THREE.Color(0x163f4a);
-const brumeAir = { couleur: new THREE.Color(), near: 0, far: 0, fond: null, ciel: false };
+const brumeAir = { couleur: new THREE.Color(), fond: null, ciel: false };
 let sousLEau = false;
 function majSousEau(t) {
   const dessous = t.y < NIVEAU_LAC - 0.05 && dansLeLac(t.x, t.z);
   if (dessous === sousLEau) return;
   sousLEau = dessous;
   if (dessous) {
-    Object.assign(brumeAir, { near: scene.fog.near, far: scene.fog.far, fond: scene.background, ciel: ciel.visible });
+    Object.assign(brumeAir, { fond: scene.background, ciel: ciel.visible });
     brumeAir.couleur.copy(scene.fog.color);
-    scene.fog.color.copy(BRUME_EAU); scene.fog.near = 0.3; scene.fog.far = 24;
+    scene.fog.color.copy(BRUME_EAU); scene.fog.density = 0.12;
     scene.background = BRUME_EAU; ciel.visible = false;
   } else {
-    scene.fog.color.copy(brumeAir.couleur); scene.fog.near = brumeAir.near; scene.fog.far = brumeAir.far;
+    scene.fog.color.copy(brumeAir.couleur); scene.fog.density = DENSITE_BRUME;
     scene.background = brumeAir.fond; ciel.visible = brumeAir.ciel;
   }
 }
@@ -448,6 +468,7 @@ let renduEcran = null;   // rendu "cinéma" de l'écran du PC (créé à la fin 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));   // (la fenêtre a pu passer sur un autre écran)
   renderer.setSize(innerWidth, innerHeight);
   renduEcran?.redimensionner(innerWidth, innerHeight);
 });
@@ -572,6 +593,7 @@ function boucle(dtImpose) {
   majHerbe(tempsJeu, tete, tmp);
   if (images % 4 === 0) majSousBois(tete);
   if (images % 4 === 2) majSolides(tmp);
+  if (images % 4 === 1) majRelief(tete);
   soleil.target.updateMatrixWorld();
   ciel.position.copy(tete);
   majMessage(dt);
@@ -579,6 +601,7 @@ function boucle(dtImpose) {
   majSousEau(tete);
   if (images % 6 === 0) masquerLointains(tete);
   animerEau(tempsJeu);
+  animerVille(tempsJeu);
   if (renduEcran && !enVR) renduEcran.rendre();   // écran du PC : image "cinéma" (occlusion, lueurs, étalonnage)
   else renderer.render(scene, camera);
   majAuditeur(camera);
@@ -617,6 +640,7 @@ window.jeu = {
   world, joueur, mains, objets, renderer, scene, rig, camera, inventaire, message, pouvoirs, interface: interfaceVR, catalogue, teleporter, sommet,
   get personnages() { return personnages; },
   get ips() { return ips; },
+  get renduEcran() { return renduEcran; },
   simuler: (n, dt = 1 / 72) => { for (let i = 0; i < n; i++) boucle(dt); },
   // jeu.forcerCible('right', {x,y,z}, quaternion) ; jeu.forcerCible('right', null) pour revenir à la normale
   forcerCible: (cote, pos, quat = qCam.clone().multiply(MAIN_PC)) => {

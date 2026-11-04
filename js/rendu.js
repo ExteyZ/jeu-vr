@@ -55,6 +55,6 @@ export function creerRenduEcran(renderer, scene, camera) {
     composer,
     rendre: () => composer.render(),
     alleger: () => { if (!ao.enabled) return false; ao.enabled = false; return true; },   // coupe l'occlusion ambiante (écran trop lent)
-    redimensionner: (l, h) => { composer.setSize(l, h); ao.setSize(l * renderer.getPixelRatio(), h * renderer.getPixelRatio()); },
+    redimensionner: (l, h) => { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(l, h); ao.setSize(l * renderer.getPixelRatio(), h * renderer.getPixelRatio()); },
   };
 }
