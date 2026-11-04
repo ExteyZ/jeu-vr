@@ -10,9 +10,9 @@ import { creerPersonnages } from './personnages.js';
 import { jouerSon, majAuditeur } from './sons.js';
 import { chargerRessources, ressources } from './ressources.js';
 import { construireTerrain, majRelief, hauteur, hauteurSol, riveSud, NIVEAU_LAC, HAMEAU, BELVEDERE } from './terrain.js';
-import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, horsReflet } from './eau.js';
+import { construireEau, animerEau, flotter, dansLeLac, capturerReflets, majRefletMiroir, horsReflet } from './eau.js';
 import { construireHameau } from './village.js';
-import { construireVille, animerVille } from './ville.js';
+import { construireVille, animerVille, refleterVille } from './ville.js';
 import { Pouvoirs } from './pouvoirs.js';
 import { Interface } from './interface.js';
 import { majEffets } from './effets.js';
@@ -29,7 +29,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 if (ULTRA) renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // ombres aux bords doux (carte graphique du PC)
-renderer.toneMapping = THREE.NeutralToneMapping;   // rendu "photo" : couleurs vives et fidèles, hautes lumières douces
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // rendu "cinéma" : contraste, ombres profondes, hautes lumières douces
 renderer.toneMappingExposure = 1.0;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
@@ -81,6 +81,7 @@ await chargerRessources(renderer, (f) => {
 const ambiance = new THREE.HemisphereLight(0xeaf2ff, 0x8f8576, 1.15);
 if (ressources.environnement) {
   scene.environment = ressources.environnement;   // reflets et lumière ambiante venant du vrai ciel
+  scene.environmentIntensity = 0.75;   // (un peu moins que le soleil direct : ombres plus franches)
   scene.background = ressources.ciel;
   if (ressources.horizon) scene.fog.color.copy(ressources.horizon);
   ciel.visible = false;
@@ -93,7 +94,7 @@ lampeHall.position.set(0, 4.1, 16);
 const lampeEntrepot = new THREE.PointLight(0xfff0d8, 40, 24, 1.6);
 lampeEntrepot.position.set(-23, 6.4, 0);
 // (lampes d'intérieur de l'ancien hall : plus utilisées)
-const soleil = new THREE.DirectionalLight(0xfff3e0, 2.8);
+const soleil = new THREE.DirectionalLight(0xfff1dc, 3.3);
 soleil.castShadow = true;
 const OMBRE = PROFIL.ombre;
 soleil.shadow.mapSize.setScalar(OMBRE.taille);
@@ -169,7 +170,7 @@ function majCadran() {
 
 // --- Qualité automatique : si le casque n'arrive pas à suivre 3 secondes de suite, on allège ---
 // Niveaux : 0 = tout (ombres fines, lampes), 1 = lampes coupées et ombres plus grossières, 2 = sans ombres
-let qualite = 0, secondesLentes = 0, secondesLentesEcran = 0, qualiteChoisie = 'auto';
+let qualite = 0, secondesLentes = 0, secondesLentesEcran = 0, qualiteChoisie = 'auto', miroirLac = true;
 function appliquerQualite(niveau) {
   if (niveau === qualite) return;
   const ombresAvant = renderer.shadowMap.enabled;
@@ -186,6 +187,7 @@ function qualiteAuto(enVR) {
     // Écran du PC : si l'image saccade (moins de 40 images par seconde pendant 3 s), on coupe l'occlusion ambiante
     secondesLentesEcran = ips < 40 && tempsJeu > 15 && !document.hidden ? secondesLentesEcran + 1 : 0;   // (pas pendant le démarrage)
     if (secondesLentesEcran >= 3 && renduEcran?.alleger()) message('Ombres de contact coupées pour rester fluide');
+    else if (secondesLentesEcran >= 6 && miroirLac) { miroirLac = false; message('Reflet du lac simplifié pour rester fluide'); }
     return;
   }
   if (qualiteChoisie !== 'auto') return;
@@ -602,6 +604,7 @@ function boucle(dtImpose) {
   if (images % 6 === 0) masquerLointains(tete);
   animerEau(tempsJeu);
   animerVille(tempsJeu);
+  majRefletMiroir(renderer, camera, miroirLac && !!renduEcran && !enVR);   // reflet miroir du lac (écran du PC)
   if (renduEcran && !enVR) renduEcran.rendre();   // écran du PC : image "cinéma" (occlusion, lueurs, étalonnage)
   else renderer.render(scene, camera);
   majAuditeur(camera);
@@ -623,6 +626,7 @@ if (ecranChargement) ecranChargement.textContent = 'Préparation des graphismes�
 await new Promise((ok) => setTimeout(ok, 30));
 for (const m of listeMains) horsReflet.add(m.visuel.groupe);
 capturerReflets(renderer);
+refleterVille(renderer, [...horsReflet]);
 const texturesVues = new Set();
 scene.traverse((o) => {
   for (const m of [o.material, o.customDepthMaterial].flat()) {

@@ -33,6 +33,56 @@ export function capturerReflets(renderer) {
   materiauEau.needsUpdate = true;
 }
 
+// Reflet "miroir" sur l'écran du PC : à chaque image, on dessine la vallée vue depuis sous la surface (caméra
+// symétrique par rapport à l'eau), en deux fois plus petit ; l'eau affiche cette image, déformée par les vaguelettes.
+// (Dans le casque, on garde la sonde de reflets : beaucoup moins coûteuse.)
+const reflet = { cible: null, camera: new THREE.PerspectiveCamera(), matrice: { value: new THREE.Matrix4() }, texture: { value: null }, actif: { value: 0 } };
+const plan = new THREE.Plane(), clip = new THREE.Vector4(), q4 = new THREE.Vector4(), oeil = new THREE.Vector3(), vise = new THREE.Vector3();
+const rotation = new THREE.Matrix4(), HAUT = new THREE.Vector3(0, 1, 0), surface = new THREE.Vector3(), taille = new THREE.Vector2();
+export function majRefletMiroir(renderer, camera, actif) {
+  reflet.actif.value = 0;
+  if (!actif || !materiauEau || !ULTRA) return;
+  camera.updateMatrixWorld();
+  oeil.setFromMatrixPosition(camera.matrixWorld);
+  if (oeil.y < NIVEAU_LAC + 0.05) return;   // sous l'eau
+  renderer.getDrawingBufferSize(taille);
+  const l = Math.max(1, Math.round(taille.x / 2)), h = Math.max(1, Math.round(taille.y / 2));
+  if (!reflet.cible) { reflet.cible = new THREE.WebGLRenderTarget(l, h, { type: THREE.HalfFloatType }); reflet.texture.value = reflet.cible.texture; }
+  else if (reflet.cible.width !== l || reflet.cible.height !== h) reflet.cible.setSize(l, h);
+  // Caméra symétrique : sous l'eau, regardant vers le haut
+  const c = reflet.camera;
+  rotation.extractRotation(camera.matrixWorld);
+  vise.set(0, 0, -1).applyMatrix4(rotation).add(oeil);
+  c.position.set(oeil.x, 2 * NIVEAU_LAC - oeil.y, oeil.z);
+  c.up.set(0, 1, 0).applyMatrix4(rotation);
+  c.up.y = -c.up.y;
+  c.lookAt(vise.x, 2 * NIVEAU_LAC - vise.y, vise.z);
+  c.updateMatrixWorld();
+  c.projectionMatrix.copy(camera.projectionMatrix);
+  reflet.matrice.value.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1).multiply(c.projectionMatrix).multiply(c.matrixWorldInverse);
+  // Plan de coupe "oblique" : on ne dessine que ce qui est au-dessus de l'eau
+  plan.setFromNormalAndCoplanarPoint(HAUT, surface.set(0, NIVEAU_LAC, 0)).applyMatrix4(c.matrixWorldInverse);
+  clip.set(plan.normal.x, plan.normal.y, plan.normal.z, plan.constant);
+  const e = c.projectionMatrix.elements;
+  q4.set((Math.sign(clip.x) + e[8]) / e[0], (Math.sign(clip.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
+  clip.multiplyScalar(2 / clip.dot(q4));
+  e[2] = clip.x; e[6] = clip.y; e[10] = clip.z + 1 - 0.003; e[14] = clip.w;
+  // Dessin (sans l'eau elle-même, ni l'herbe et les petites plantes ; les ombres sont déjà calculées)
+  const eau = scene.getObjectByName('lac'), caches = [...horsReflet].filter((o) => o.visible);
+  eau.visible = false;
+  caches.forEach((o) => { o.visible = false; });
+  const ombres = renderer.shadowMap.autoUpdate, avant = renderer.getRenderTarget();
+  renderer.shadowMap.autoUpdate = false;
+  renderer.setRenderTarget(reflet.cible);
+  renderer.clear();
+  renderer.render(scene, c);
+  renderer.setRenderTarget(avant);
+  renderer.shadowMap.autoUpdate = ombres;
+  eau.visible = true;
+  caches.forEach((o) => { o.visible = true; });
+  reflet.actif.value = 1;
+}
+
 // Surface : couleur selon la profondeur réelle (vert d'eau sur les bords, sombre au large), transparente là où
 // c'est peu profond, deux couches de vaguelettes qui se croisent, reflets du paysage et du soleil
 export function construireEau(textureNormales) {
@@ -50,23 +100,34 @@ export function construireEau(textureNormales) {
     normales.wrapS = normales.wrapT = THREE.RepeatWrapping;
     normales.repeat.set(160, 90);
     mat.normalMap = normales;
-    mat.normalScale.set(0.16, 0.16);
+    mat.normalScale.set(0.11, 0.11);
   }
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tempsEau = tempsEau;
+    shader.uniforms.matriceReflet = reflet.matrice;
+    shader.uniforms.tReflet = reflet.texture;
+    shader.uniforms.refletActif = reflet.actif;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aProfondeur;\nvarying float vProfondeur;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvProfondeur = aProfondeur;');
+      .replace('#include <common>', '#include <common>\nattribute float aProfondeur;\nvarying float vProfondeur;\nuniform mat4 matriceReflet;\nvarying vec4 vCoordReflet;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvProfondeur = aProfondeur;\nvCoordReflet = matriceReflet * modelMatrix * vec4(transformed, 1.0);');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vProfondeur;\nuniform float tempsEau;')
+      .replace('#include <common>', '#include <common>\nvarying float vProfondeur;\nuniform float tempsEau;\nuniform sampler2D tReflet;\nuniform float refletActif;\nvarying vec4 vCoordReflet;')
+      // Reflet miroir (écran du PC) à la place de la sonde, décalé par les vaguelettes
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular )
+if (refletActif > 0.5) {
+  vec2 decalage = (normal.xy - nonPerturbedNormal.xy) * 0.07;
+  radiance = texture2D(tReflet, vCoordReflet.xy / vCoordReflet.w + decalage).rgb;
+}
+#endif`)
       // Une vaguelette ne peut pas refléter le fond du lac : le reflet reste au-dessus de l'horizon (montagnes, ciel)
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
         'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );',
         'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );\n\t\treflectVec = normalize( vec3( reflectVec.x, max( reflectVec.y, 0.012 ), reflectVec.z ) );'))
       .replace('#include <color_fragment>', `#include <color_fragment>
-float fond = smoothstep(0.0, 14.0, vProfondeur);
+float fond = smoothstep(0.0, 7.0, vProfondeur);
 // Eau de glacier : turquoise sur les bords (les fines particules de roche diffusent la lumière), bleu-vert profond au large
-diffuseColor.rgb *= mix(vec3(0.035, 0.2, 0.19), vec3(0.003, 0.035, 0.05), fond);
+diffuseColor.rgb *= mix(vec3(0.03, 0.16, 0.15), vec3(0.002, 0.018, 0.026), fond);
 diffuseColor.a = mix(0.5, 0.97, smoothstep(0.0, 2.5, vProfondeur));
 // Écume légère au bord de l'eau
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.55, 0.52), (1.0 - smoothstep(0.0, 0.15, vProfondeur)) * 0.3);`)

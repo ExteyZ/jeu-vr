@@ -19,6 +19,7 @@ import { materiauxCarte, objetModele, balle, caisse, carton, baril, marteau, lam
 import { creerBarque } from './village.js';
 import { NIVEAU_LAC, riveSud, VILLE } from './terrain.js';
 import { opaciteLointaine } from './arbres.js';
+import { ULTRA } from './profil.js';
 
 const QUAI = 13;                  // largeur de la promenade, de la rive aux premières façades
 const PROF = 13, RUE = 9;         // profondeur des maisons, largeur des rues
@@ -172,6 +173,7 @@ function materiaux() {
     jardiniere: new THREE.MeshStandardMaterial({ color: 0x7a4a2c, roughness: 0.8 }),
     feuilles: new THREE.MeshStandardMaterial({ color: 0x2e5a1f, roughness: 0.85 }),
     fleurs: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }),
+    eauFontaine: new THREE.MeshStandardMaterial({ color: 0x1f5c66, roughness: 0.05, metalness: 0.1, envMapIntensity: 1.4 }),
     eau: M.eau,
   };
 }
@@ -185,6 +187,47 @@ function textureStore() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+// Lumière du ciel plus faible en bas des murs (une rue entre deux rangées de maisons en reçoit moins) :
+// les façades s'assombrissent doucement vers le sol, comme dans une vraie rue (le soleil direct n'est pas touché)
+function occlusionRue(m) {
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vHautMonde;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vec4 pointMonde = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+pointMonde = instanceMatrix * pointMonde;
+#endif
+vHautMonde = (modelMatrix * pointMonde).y;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vHautMonde;')
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+{
+  float rue = mix(0.58, 1.0, smoothstep(0.0, 11.0, vHautMonde));
+  irradiance *= rue;
+#if defined( RE_IndirectSpecular )
+  radiance *= mix(rue, 1.0, 0.4);
+#endif
+}`);
+  };
+}
+
+// Reflets de la ville : une sonde photographie une rue dans toutes les directions ; les vitres et l'eau de la
+// fontaine reflètent ensuite des façades et le ciel (au lieu du ciel seul)
+export function refleterVille(renderer, caches = []) {
+  if (!V) return;
+  const cible = new THREE.WebGLCubeRenderTarget(ULTRA ? 512 : 128, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  const sonde = new THREE.CubeCamera(0.3, 9000, cible);
+  sonde.position.set(-120, 5, zRue(-120, 0));
+  const masques = caches.filter((o) => o.visible), xr = renderer.xr.enabled;
+  masques.forEach((o) => { o.visible = false; });
+  renderer.xr.enabled = false;
+  sonde.update(renderer, scene);
+  renderer.xr.enabled = xr;
+  masques.forEach((o) => { o.visible = true; });
+  for (const m of [V.vitre, V.eauFontaine]) { m.envMap = cible.texture; m.needsUpdate = true; }
 }
 
 // --- Éléments de façade, en série (une seule géométrie, affichée des milliers de fois) ---
@@ -715,7 +758,7 @@ function placeDuVillage(depart) {
     new THREE.CylinderGeometry(0.12, 0.18, 0.5, 8).translate(0, 2.55, 0),
     new THREE.SphereGeometry(0.2, 12, 8).translate(0, 2.9, 0),
   ]) ajouterAuLot(pierre, g.translate(fx, 0, fz));
-  const eauFontaine = new THREE.MeshStandardMaterial({ color: 0x1f5c66, roughness: 0.05, metalness: 0.1, envMapIntensity: 1.4 });
+  const eauFontaine = V.eauFontaine;
   const eau = new THREE.Mesh(new THREE.CircleGeometry(3.0, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 8), eauFontaine);
   eau.position.set(fx, 0.6, fz);
   const vasque = new THREE.Mesh(new THREE.CircleGeometry(1.02, 16).rotateX(-Math.PI / 2), eauFontaine);
@@ -790,6 +833,7 @@ function placeDuVillage(depart) {
 // --- Construction de toute la ville ---
 export function construireVille() {
   V = materiaux();
+  for (const m of [V.facade, V.socle, V.pierreBlanche, V.cadre, V.volet, V.porte, V.vitrine, V.boisPeint, V.jardiniere, V.fer, V.granit]) occlusionRue(m);
   const S = series();
   // Sols : pavés dans toutes les rues, gros pavés sur la place
   bande(V.pavage, (x) => zRang(x, 0) + 0.5, () => VILLE.z1 + 6, 0.015);
